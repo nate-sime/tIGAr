@@ -76,7 +76,7 @@ for i in range(0,3):
 
 # Write the extraction data.
 DIR = "./extraction"
-splineGenerator.writeExtraction(DIR)
+splineGenerator.write_extraction(DIR)
 
 
 ####### Analysis #######
@@ -135,7 +135,7 @@ def unit(v):
 def shellGeometry(x):
 
     # Covariant basis vectors:
-    dxdxi = spline.parametricGrad(x)
+    dxdxi = spline.parametric_grad(x)
     a0 = as_vector([dxdxi[0,0],dxdxi[1,0],dxdxi[2,0]])
     a1 = as_vector([dxdxi[0,1],dxdxi[1,1],dxdxi[2,1]])
     a2 = unit(cross(a0,a1))
@@ -144,7 +144,7 @@ def shellGeometry(x):
     a = as_matrix(((inner(a0,a0),inner(a0,a1)),
                    (inner(a1,a0),inner(a1,a1))))
     # Curvature:
-    deriva2 = spline.parametricGrad(a2)
+    deriva2 = spline.parametric_grad(a2)
     b = -as_matrix(((inner(a0,deriva2[:,0]),inner(a0,deriva2[:,1])),
                     (inner(a1,deriva2[:,0]),inner(a1,deriva2[:,1]))))
     

@@ -66,8 +66,8 @@ b = mu*inner(u,v)*spline.dx
 # the diagonal entries for A corresponding to Dirichlet BCs are set to a
 # large value is to shift the corresponding eigenmodes to the high end of
 # the frequency spectrum.  
-A = spline.assembleMatrix(a,diag=1.0/DOLFIN_EPS)
-B = spline.assembleMatrix(b)
+A = spline.assemble_matrix(a, diag=1.0 / DOLFIN_EPS)
+B = spline.assemble_matrix(b)
 
 # Solve the eigenvalue problem, ordering values from smallest to largest in
 # magnitude.  

@@ -52,7 +52,7 @@ for field in range(0,3):
 
 # Write the extraction data to the filesystem.
 DIR = "./extraction"
-splineGenerator.writeExtraction("./extraction")
+splineGenerator.write_extraction("./extraction")
 
 
 ####### Analysis #######
@@ -80,7 +80,7 @@ Re = Constant(100.0)
 VISC = DENS/Re
 
 # The initial condition for the flow:
-x = spline.spatialCoordinates()
+x = spline.spatial_coordinates()
 soln0 = sin(x[0])*cos(x[1])*cos(x[2])
 soln1 = -cos(x[0])*sin(x[1])*cos(x[2])
 soln = as_vector([soln0,soln1,Constant(0.0)])

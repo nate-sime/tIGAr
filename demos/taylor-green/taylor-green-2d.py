@@ -88,7 +88,7 @@ for field in range(0,2):
 
 # Write extraction data to filesystem.
 DIR = "./extraction"
-splineGenerator.writeExtraction("./extraction")
+splineGenerator.write_extraction("./extraction")
 
 
 ####### Analysis #######
@@ -110,7 +110,7 @@ N_STEPS = int(2**REF_LEVEL)
 DELTA_T = TIME_INTERVAL/float(N_STEPS)
 
 # The initial condition for the Taylor--Green vortex:
-x = spline.spatialCoordinates()
+x = spline.spatial_coordinates()
 soln0 = sin(x[0])*cos(x[1])
 soln1 = -cos(x[0])*sin(x[1])
 # (Because igakit produces a 3D physical domain, physical velocities are 3D.)

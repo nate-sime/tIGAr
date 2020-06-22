@@ -91,7 +91,7 @@ for level in range(0,N_LEVELS):
 
     # Write extraction data to the filesystem.
     DIR = "./extraction"
-    splineGenerator.writeExtraction(DIR)
+    splineGenerator.write_extraction(DIR)
 
     ####### Analysis #######
 
@@ -124,7 +124,7 @@ for level in range(0,N_LEVELS):
     v = spline.rationalize(TestFunction(spline.V))
 
     # Create a force, f, to manufacture the solution, soln
-    x = spline.spatialCoordinates()
+    x = spline.spatial_coordinates()
     soln = sin(pi*x[0])*sin(pi*x[1])
     f = -spline.div(spline.grad(soln))
 

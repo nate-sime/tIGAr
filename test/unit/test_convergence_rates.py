@@ -27,7 +27,7 @@ def test_poisson():
         u = TrialFunction(spline.V)
         v = TestFunction(spline.V)
 
-        x = spline.spatialCoordinates()
+        x = spline.spatial_coordinates()
         soln = sin(pi * x[0]) * sin(pi * x[1])
         f = -spline.div(spline.grad(soln))
 

@@ -61,7 +61,7 @@ for side in range(0,2):
 
 # Write extraction data to the filesystem.
 DIR = "./extraction"
-splineGenerator.writeExtraction(DIR)
+splineGenerator.write_extraction(DIR)
 
 
 ####### Analysis #######
@@ -99,7 +99,7 @@ def unit(v):
 def midsurfaceGeometry(x):
 
     # Covariant basis vectors
-    dxdxi = spline.parametricGrad(x)
+    dxdxi = spline.parametric_grad(x)
     a0 = as_vector([dxdxi[0,0],dxdxi[1,0],dxdxi[2,0]])
     a1 = as_vector([dxdxi[0,1],dxdxi[1,1],dxdxi[2,1]])
     a2 = unit(cross(a0,a1))
@@ -108,7 +108,7 @@ def midsurfaceGeometry(x):
     a = as_matrix(((inner(a0,a0),inner(a0,a1)),\
                    (inner(a1,a0),inner(a1,a1))))
     # Curvature
-    deriv_a2 = spline.parametricGrad(a2)
+    deriv_a2 = spline.parametric_grad(a2)
     b = -as_matrix(((inner(a0,deriv_a2[:,0]),inner(a0,deriv_a2[:,1])),\
                     (inner(a1,deriv_a2[:,0]),inner(a1,deriv_a2[:,1]))))
     

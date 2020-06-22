@@ -53,7 +53,7 @@ for level, n_ele in enumerate(n_eles):
 
     # Write extraction data to the filesystem.
     DIR = "./extraction"
-    spline_generator.writeExtraction(DIR)
+    spline_generator.write_extraction(DIR)
 
     ####### Analysis #######
 
@@ -87,7 +87,7 @@ for level, n_ele in enumerate(n_eles):
     v = TestFunction(spline.V)
 
     # Create a force, f, to manufacture the solution, soln
-    x = spline.spatialCoordinates()
+    x = spline.spatial_coordinates()
     soln = sin(pi * x[0]) * sin(pi * x[1])
     f = -spline.div(spline.grad(soln))
 
