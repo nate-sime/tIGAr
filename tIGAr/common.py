@@ -316,7 +316,7 @@ class AbstractExtractionGenerator(abc.ABC):
         """
         pass
 
-    def globalDof(self,field,localDof):
+    def globalDof(self, field, localDof):
         """
         Given a ``field`` and a local DoF number ``localDof``, 
         return the global DoF number; 
@@ -324,7 +324,7 @@ class AbstractExtractionGenerator(abc.ABC):
         """
         # offset localDof by 
         retval = localDof
-        for i in range(0,field):
+        for i in range(0, field):
             retval += self.get_ncp(i)
         return retval
     
@@ -520,71 +520,63 @@ class AbstractExtractionGenerator(abc.ABC):
             self.zero_dofs = self.permutationAO.app2petsc\
                             (zeroDofIS).getIndices()
     
-    def writeExtraction(self,dirname,doPermutation=DEFAULT_DO_PERMUTATION):
+    def write_extraction(self, dir_name: str,
+                         do_permutation: bool = DEFAULT_DO_PERMUTATION):
         """
-        Writes all extraction data to files in a directory named 
-        ``dirname``.  The optional argument ``doPermutation`` is a Boolean
-        indicating whether or not to permute the unknowns for better
-        parallel performance in matrix--matrix multiplications.  (Computing
-        this permuation may be slow for large meshes.)
-        """
-        # need:
-        # - HDF5 file w/
-        # -- mesh
-        # -- extracted CPs, weights
-        # - Serialized PETSc matrix for M_control
-        # - Serialized PETSc matrix for M
-        # - txt file w/
-        # -- nsd
-        # -- number of fields
-        # -- for each field (+ scalar control field)
-        # --- function space info (element type, degree)
-        # - File for each processor listing zero-ed dofs
+        Write extract data to disk:
 
-        if(doPermutation):
+        * HDF5 File
+            - mesh
+            - extracted control points and weights
+        * Serialization of M_control
+        * Serialization of M
+        * Text metadata
+            - Number of spatial dimensions (``nsd``)
+            - Number of fields for each field and scalar control field
+            - Function space metadata: element type and degree
+        * File for each processor listing zeroed DoFs
+
+        Parameters
+        ----------
+        dir_name : Output directory
+        do_permutation : Permute DoFs for improved parallel matmult performance.
+            Setting to True may be slow for large meshes
+        """
+        if do_permutation:
             self.apply_permutation()
-        
 
         # write HDF file
-        #f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,"w")
-        f = HDF5File(self.comm,dirname+"/"+EXTRACTION_DATA_FILE,"w")
-        f.write(self.mesh,EXTRACTION_H5_MESH_NAME)
+        f = HDF5File(self.comm, dir_name + "/" + EXTRACTION_DATA_FILE, "w")
+        f.write(self.mesh, EXTRACTION_H5_MESH_NAME)
 
-        for i in range(0,self.nsd+1):
-            f.write(self.cpFuncs[i],EXTRACTION_H5_CONTROL_FUNC_NAME(i))
+        for i in range(0, self.nsd + 1):
+            f.write(self.cpFuncs[i], EXTRACTION_H5_CONTROL_FUNC_NAME(i))
         f.close()
 
         # PETSc matrices
-        viewer = PETSc.Viewer(self.comm)\
-                      .createBinary(dirname+"/"+EXTRACTION_MAT_FILE, 'w')
+        viewer = PETSc.Viewer(self.comm) \
+            .createBinary(dir_name + "/" + EXTRACTION_MAT_FILE, 'w')
         viewer(self.M.mat())
-        viewer = PETSc.Viewer(self.comm)\
-                      .createBinary(dirname+"/"+EXTRACTION_MAT_FILE_CTRL, 'w')
+        viewer = PETSc.Viewer(self.comm) \
+            .createBinary(dir_name + "/" + EXTRACTION_MAT_FILE_CTRL, 'w')
         viewer(self.M_control.mat())
 
-        # write out zero-ed dofs 
-        #dofList = self.zeroDofs
-        #fs = ""
-        #for dof in dofList:
-        #    fs += str(dof)+" "
-        #f = open(dirname+"/"+EXTRACTION_ZERO_DOFS_FILE,"w")
-        #f.write(fs)
-        #f.close()
+        # write out zero-ed dofs
         zeroDofIS = PETSc.IS(self.comm)
         zeroDofIS.createGeneral(numpy.array(self.zero_dofs, dtype=INDEX_TYPE))
-        viewer = PETSc.Viewer(self.comm)\
-                      .createBinary(dirname+"/"+EXTRACTION_ZERO_DOFS_FILE, 'w')
+        viewer = PETSc.Viewer(self.comm) \
+            .createBinary(dir_name + "/" + EXTRACTION_ZERO_DOFS_FILE, 'w')
         viewer(zeroDofIS)
-        
+
         # write info
-        if(mpirank == 0):
-            fs = str(self.nsd) +"\n" \
+        if (mpirank == 0):
+            fs = str(self.nsd) + "\n" \
                  + self.extraction_element() + "\n" \
                  + str(self.get_num_fields()) + "\n"
             for i in range(-1, self.get_num_fields()):
-                fs += str(self.get_degree(i)) +"\n" \
+                fs += str(self.get_degree(i)) + "\n" \
                       + str(self.get_ncp(i)) + "\n"
-            f = open(dirname+"/"+EXTRACTION_INFO_FILE,'w')
+            f = open(dir_name + "/" + EXTRACTION_INFO_FILE, 'w')
             f.write(fs)
             f.close()
         MPI.barrier(self.comm)
@@ -617,10 +609,10 @@ class ExtractedNonlinearProblem(NonlinearProblem):
     def form(self,A,P,B,x):
         self.solution.vector()[:] = self.spline.M*x
     def F(self,b,x):
-        b[:] = self.spline.assembleVector(self.residual)
+        b[:] = self.spline.assemble_vector(self.residual)
         return b
     def J(self,A,x):
-        M = self.spline.assembleMatrix(self.tangent).mat()
+        M = self.spline.assemble_matrix(self.tangent).mat()
         A.mat().setSizes(M.getSizes())
         A.mat().setUp()
         M.copy(result=A.mat())
@@ -765,58 +757,33 @@ class ExtractedSpline:
             "Constructor not implemented for %s" % str(type(arg)))
 
     @__init__.register
-    def _(self, extraction_generator: AbstractExtractionGenerator,
+    def _(self, generator: AbstractExtractionGenerator,
           quad_deg: int, do_permutation: bool=DEFAULT_DO_PERMUTATION):
-        """
-        Parameters
-        ----------
-        extraction_generator: Spline extraction
-        quad_deg: Quadrature degree using in integration of spline
-        do_permutation: Choose whether or not to apply a permutation to the IGA
-            DoF order
-        """
-        self.init_from_generator(extraction_generator, quad_deg, do_permutation)
-        self.generic_setup()
-
-    @__init__.register
-    def _(self, file_path: str, quad_deg: int, mesh: dolfin.Mesh,
-          comm=MPI.comm_world):
-        """
-        Parameters
-        ----------
-        file_path: Corresponding to directory containing spline extraction data
-        quad_deg: Quadrature degree using in integration of spline
-        mesh: Function spaces can be established on the same mesh as an
-            existing spline object for facilitating segregated solver schemes.
-            (Splines common to one set of extraction data are always treated
-            as a monolothic mixed function space.)
-        comm: MPI communicator
-        """
-        self.init_from_filesystem(file_path, quad_deg, comm, mesh)
-        self.generic_setup()
-            
-    def init_from_generator(self, generator: AbstractExtractionGenerator,
-                            quad_deg: int,
-                            doPermutation: bool = DEFAULT_DO_PERMUTATION):
         """
         Generates instance from an ``AbstractExtractionGenerator``, without
         passing through the filesystem.  This mainly exists to circumvent
-        broken parallel HDF5 file output for quads and hexes in 2017.2 
-        (See Issue #1000 for DOLFIN on Bitbucket.)  
+        broken parallel HDF5 file output for quads and hexes in 2017.2
+        (See Issue #1000 for DOLFIN on Bitbucket.)
 
         Notes
         -----
         While seemingly-convenient for small-scale testing/demos, and
         more robust in the sense that it makes no assumptions about the
         DoF ordering in FunctionSpaces being deterministic,
-        this is not the preferred workflow for most realistic 
-        cases, as it forces a possibly-expensive preprocessing step to 
-        execute every time the analysis code is run.  
-        """
+        this is not the preferred workflow for most realistic
+        cases, as it forces a possibly-expensive preprocessing step to
+        execute every time the analysis code is run.
 
-        if doPermutation:
+        Parameters
+        ----------
+        generator: Spline extraction
+        quad_deg: Quadrature degree using in integration of spline
+        do_permutation: Choose whether or not to apply a permutation to the IGA
+            DoF order
+        """
+        if do_permutation:
             generator.apply_permutation()
-        
+
         self.quad_deg = quad_deg
         self.nsd = generator.get_nsd()
         self.element_type = generator.extraction_element()
@@ -836,20 +803,31 @@ class ExtractedSpline:
         zero_dof_is.createGeneral(
             numpy.array(generator.zero_dofs, dtype=INDEX_TYPE))
         self.zero_dofs = zero_dof_is
-            
-    def init_from_filesystem(self, dir_name: str, quad_deg: int, comm,
-                             mesh: dolfin.Mesh=None):
 
+        self.generic_setup()
+
+    @__init__.register
+    def _(self, dir_name: str, quad_deg: int, mesh: dolfin.Mesh,
+          comm=MPI.comm_world):
         """
-        Generates instance from extraction data in directory ``dirname``. 
-        Optionally takes a ``mesh`` argument, so that function spaces can be
+        Generates instance from extraction data in the provided directory.
+        Optionally takes a DOLFIN mesh argument, so that function spaces can be
         established on the same mesh as an existing spline object for
-        facilitating segregated solver schemes.  (Splines common to one
-        set of extraction data are always treated as a monolothic mixed
-        function space.)  Everything to do with the spline is integrated 
-        using a quadrature rule of degree ``quadDeg``.
-        """
+        facilitating segregated solver schemes. (Splines common to one set of
+        extraction data are always treated as a monolothic mixed function
+        space). Everything to do with the spline is integrated using a
+        quadrature rule implementing the provided degree.
 
+        Parameters
+        ----------
+        dir_name: Corresponding to directory containing spline extraction data
+        quad_deg: Quadrature degree using in integration of spline
+        mesh: Function spaces can be established on the same mesh as an
+            existing spline object for facilitating segregated solver schemes.
+            (Splines common to one set of extraction data are always treated
+            as a monolothic mixed function space.)
+        comm: MPI communicator
+        """
         self.quad_deg = quad_deg
         self.comm = comm
 
@@ -888,12 +866,12 @@ class ExtractedSpline:
 
             # NOTE: behaves erratically in parallel for quad/hex meshes
             # in 2017.2; hopefully will be fixed soon (see dolfin
-            # issue #1000).  
+            # issue #1000).
             f.read(self.mesh,EXTRACTION_H5_MESH_NAME,True)
 
         else:
             self.mesh = mesh
-        
+
         # create function spaces
         self.VE_control\
             = FiniteElement(self.element_type, self.mesh.ufl_cell(), \
@@ -911,9 +889,9 @@ class ExtractedSpline:
         else:
             self.VE = FiniteElement(self.element_type, self.mesh.ufl_cell(), \
                                     self.p[0])
-            
+
         self.V = FunctionSpace(self.mesh,self.VE)
-        
+
         # read control functions
         self.cp_funcs = []
         for i in range(0,self.nsd+1):
@@ -921,7 +899,7 @@ class ExtractedSpline:
             f.read(self.cp_funcs[i], \
                    EXTRACTION_H5_CONTROL_FUNC_NAME(i))
         f.close()
-        
+
         # read extraction matrix and create transpose for control space
         Istart, Iend = as_backend_type\
                        (self.cp_funcs[0].vector()).vec().getOwnershipRange()
@@ -940,11 +918,11 @@ class ExtractedSpline:
             = PETSc.Viewer(self.comm)\
                    .createBinary(dir_name \
                                  +"/" + EXTRACTION_MAT_FILE_CTRL,'r')
-        
+
         self.M_control = PETScMatrix(MPETSc.load(viewer))
 
         #exit()
-        
+
         # read extraction matrix and create transpose
         Istart, Iend = as_backend_type\
                        (Function(self.V).vector()).vec().getOwnershipRange()
@@ -985,13 +963,12 @@ class ExtractedSpline:
                       (dir_name + "/" + EXTRACTION_ZERO_DOFS_FILE, "r")
         self.zero_dofs = PETSc.IS(self.comm)
         self.zero_dofs.load(viewer)
+        self.generic_setup()
 
     def generic_setup(self):
-
         """
         Setup steps to take regardless of the source of extraction data.
         """
-        
         # for marking subdomains
         #self.boundaryMarkers = FacetFunctionSizet(self.mesh,0)
         #self.boundaryMarkers \
@@ -1072,9 +1049,9 @@ class ExtractedSpline:
         tempFunc = Function(self.V)
         tempFunc.assign(u)
         # RHS of problem for initial guess IGA DoFs:
-        MTtemp = self.extractVector(tempFunc.vector(),applyBCs=False)
+        MTtemp = self.extract_vector(tempFunc.vector(), apply_bcs=False)
         # Vector with right dimension for IGA DoFs (content doesn't matter):
-        tempVec = self.extractVector(tempFunc.vector())
+        tempVec = self.extract_vector(tempFunc.vector())
         # LHS of problem for initial guess:
         Mm = as_backend_type(self.M).mat()
         MTMm = Mm.transposeMatMult(Mm)
@@ -1107,50 +1084,77 @@ class ExtractedSpline:
     #    disp = Function(self.V_displacement)
     #    disp.interpolate(expr)
     #    return disp
-        
-    # Cartesian differential operators in deformed configuration
-    # N.b. that, when applied to tensor-valued f, f is considered to be
-    # in the Cartesian coordinates of the physical configuration, NOT in the
-    # local coordinate chart w.r.t. which derivatives are taken by FEniCS
-    def grad(self,f,F=None):
-        """ 
-        Cartesian gradient of ``f`` w.r.t. physical coordinates.  
-        Optional argument ``F`` can be used to take the gradient assuming 
-        a different mapping from
-        parametric to physical space.  (Default is ``self.F``.)
+
+    def grad(self, f, F=None):
         """
-        if(F==None):
+        Cartesian gradient in deformed configuration
+
+        Parameters
+        ----------
+        f : Mathematical expression
+        F : Optional explicitly provided mapping from parametric to physical
+            space
+
+        Returns
+        -------
+        Cartesian gradient with respect to physical coordinates
+
+        Notes
+        -----
+        When applied to tensor-valued expressions, f is considered to be in
+        the Cartesian coordinates of the physical configuration, *not* in the
+        local coordinate chart with respect to which derivatives are taken by
+        FEniCS.
+        """
+        if F is None:
             F = self.F
-        return cartesianGrad(f,F)
-    def div(self,f,F=None):
-        """ 
-        Cartesian divergence of ``f`` w.r.t. physical coordinates.  
-        Optional argument ``F``
-        can be used to take the gradient assuming a different mapping from
-        parametric to physical space.  (Default is ``self.F``.)
+        return cartesian_grad(f, F)
+
+    def div(self, f, F=None):
         """
-        if(F==None):
+        Parameters
+        ----------
+        f : Mathematical expression
+        F : Optional explicitly provided mapping from parametric to physical
+            space
+
+        Returns
+        -------
+        Cartesian divergence with respect to physical coordinates
+        """
+        if F is None:
             F = self.F
-        return cartesianDiv(f,F)
-    # only applies in 3D, to vector-valued f
-    def curl(self,f,F=None):
-        """ 
-        Cartesian curl w.r.t. physical coordinates.  Only applies in 3D, to
-        vector-valued ``f``.  Optional argument ``F``
-        can be used to take the gradient assuming a different mapping from
-        parametric to physical space.  (Default is ``self.F``.)
+        return cartesian_div(f, F)
+
+    def curl(self, f, F=None):
         """
-        if(F==None):
+        Parameters
+        ----------
+        f : Mathematical expression
+        F : Optional explicitly provided mapping from parametric to physical
+            space
+
+        Returns
+        -------
+        Cartesian curl with respect to physical coordinates
+
+        Notes
+        -----
+        Only applies in 3D to vector-valued expressions.
+        """
+        if F is None:
             F = self.F
-        return cartesianCurl(f,F)
-    
-    # partial derivatives with respect to curvilinear coordinates; this is
-    # just a wrapper for FEniCS grad(), but included to allow for writing
-    # clear, unambiguous scripts
-    def parametricGrad(self,f):
+        return cartesian_curl(f, F)
+
+    def parametric_grad(self, f):
         """
-        Gradient of ``f`` w.r.t. parametric coordinates.  (Equivalent to UFL 
-        ``grad()``, but introduced to avoid confusion with ``self.grad()``.)
+        Parameters
+        ----------
+        f : Mathematical expression
+
+        Returns
+        -------
+        Cartesian gradient with respect to parametric coordinates
         """
         return grad(f)
     
@@ -1158,7 +1162,7 @@ class ExtractedSpline:
     # CurvilinearTensor w/ all indices lowered.  Metric defaults to one
     # generated by mapping self.F (into Cartesian space) if no metric is
     # supplied via f.
-    def GRAD(self,f):
+    def curvilinear_grad(self, f):
         """
         Covariant derivative of a ``CurvilinearTensor``, ``f``, taken w.r.t. 
         parametric coordinates, assuming that components
@@ -1166,12 +1170,13 @@ class ExtractedSpline:
         is passed for ``f``, a ``CurvilinearTensor`` will be created with all 
         lowered indices.
         """
-        if(not isinstance(f,CurvilinearTensor)):
-            ff = CurvilinearTensor(f,self.g)
+        if not isinstance(f, CurvilinearTensor):
+            ff = CurvilinearTensor(f, self.g)
         else:
             ff = f
         return curvilinearGrad(ff)
-    def DIV(self,f):
+
+    def curvilinear_div(self, f):
         """
         Curvilinear divergence operator corresponding to ``self.GRAD()``. 
         Contracts new lowered index from ``GRAD`` with last raised 
@@ -1201,7 +1206,7 @@ class ExtractedSpline:
     #    retval.cpFuncs = self.cpFuncs
     #    return retval
 
-    def parametricExpression(self,expr):
+    def parametric_expression(self, expr) -> dolfin.Expression:
         """
         Create an ``Expression`` from a string, ``expr``, interpreting the
         coordinates ``'x[i]'`` in ``expr`` as parametric coordinates.
@@ -1209,7 +1214,7 @@ class ExtractedSpline:
         """
         return Expression(expr, degree=self.quad_deg)
 
-    def parametricCoordinates(self):
+    def parametric_coordinates(self) -> ufl.SpatialCoordinate:
         """
         Wrapper for ``SpatialCoordiantes()`` to avoid confusion, since
         FEniCS's spatial coordinates are used in tIGAr as parametric 
@@ -1217,34 +1222,44 @@ class ExtractedSpline:
         """
         return SpatialCoordinate(self.mesh)
 
-    def spatialCoordinates(self):
+    def spatial_coordinates(self):
         """
-        Returns the mapping ``self.F``, which gives the spatial coordinates
-        of a parametric point.
+        Returns
+        -------
+        The mapping F which gives the spatial coordinates of a parametric point
         """
         return self.F
     
-    def rationalize(self,u):
+    def rationalize(self, u: typing.Any):
         """
-        Divides its argument ``u`` by the weighting function of the spline's
+        Divides its argument by the weighting function of the spline's
         control mesh.
         """
         return u/(self.cp_funcs[self.nsd])
 
     # split out to implement contact
-    def extractVector(self,b,applyBCs=True):
+    def extract_vector(self, b: dolfin.PETScVector, apply_bcs: bool = True):
         """
-        Apply extraction to an FE vector ``b``.  The Boolean ``applyBCs`` 
-        indicates whether or not to apply BCs to the vector.
+        Apply extraction to an FE vector. Optional boolean argument indicates
+        whether or not to apply BCs to the vector.
+
+        Parameters
+        ----------
+        b : PETScVector of coefficients
+        apply_bcs : Apply BCs to resulting vector
+
+        Returns
+        -------
+        Extracted vector M^T b
         """
         # MT determines parallel partitioning of MTb
-        if(FORM_MT):
-            MTb = (self.MT)*b
+        if FORM_MT:
+            MTb = self.MT*b
         else:
-            MTb = multTranspose(self.M,b)
+            MTb = multTranspose(self.M, b)
 
         # apply zero bcs to MTAM and MTb
-        if(applyBCs):
+        if apply_bcs:
             as_backend_type(MTb).vec().setValues\
                 (self.zero_dofs, numpy.zeros(self.zero_dofs.getLocalSize()))
             as_backend_type(MTb).vec().assemblyBegin()
@@ -1252,28 +1267,43 @@ class ExtractedSpline:
 
         return MTb
     
-    def assembleVector(self,form,applyBCs=True):
+    def assemble_vector(self, form: dolfin.Form, apply_bcs: bool = True):
         """
-        Assemble M^T*b, where ``form`` is a linear form and the Boolean
-        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
+        Assemble M^T b where b is a vector assembled from the provided linear
+        form and the optional argument indicates whether or not to apply the
+        Dirichlet BCs.
+
+        Parameters
+        ----------
+        form : Linear finite element form to assemble into b
+        apply_bcs : Optional demand to apply BCs after assembly
+
+        Returns
+        -------
+        M^T b
         """
-        #b = PETScVector()
-        #assemble(form, tensor=b)
         b = assemble(form)
-
-        MTb = self.extractVector(b,applyBCs=applyBCs)
-
+        MTb = self.extract_vector(b, apply_bcs=apply_bcs)
         return MTb
 
-    # split out to implement contact
-    def extractMatrix(self,A,applyBCs=True,diag=1):
+    def extract_matrix(self, A: dolfin.PETScMatrix, apply_bcs: bool = True,
+                       diag: int = 1) -> dolfin.PETScMatrix:
         """
-        Apply extraction to an FE matrix ``A``.  The Boolean ``applyBCs``
-        indicates whether or not to apply BCs to the matrix, and the 
-        optional argument ``diag`` is what will be filled into diagonal
-        entries where Dirichlet BCs are applied.
+        Apply extraction to an FE matrix.
+
+        Parameters
+        ----------
+        A : Finite element matrix
+        apply_bcs : Optional argument indicating whether to apply Dirichlet
+            BCs
+        diag : Where Dirichlet BCs are applied, this value is inserted into
+            the corresponding diagonal entries
+
+        Returns
+        -------
+        The extracted matrix M^T A M
         """
-        if(FORM_MT):
+        if FORM_MT:
             Am = as_backend_type(A).mat()
             MTm = as_backend_type(self.MT).mat()
             MTAm = MTm.matMult(Am)
@@ -1289,27 +1319,34 @@ class ExtractedSpline:
 
         # apply zero bcs to MTAM and MTb
         # (default behavior is to set diag=1, as desired)
-        if(applyBCs):
+        if(apply_bcs):
             as_backend_type(MTAM).mat().zeroRowsColumns(self.zero_dofs, diag)
         as_backend_type(MTAM).mat().assemblyBegin()
         as_backend_type(MTAM).mat().assemblyEnd()
 
         return MTAM
     
-    def assembleMatrix(self,form,applyBCs=True,diag=1):
+    def assemble_matrix(self, form, applyBCs=True, diag=1) \
+            -> dolfin.PETScMatrix:
         """
-        Assemble M^T*A*M, where ``form`` is a bilinear form and the Boolean
-        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
-        The optional argument ``diag`` is what will be filled into diagonal
-        entries where Dirichlet BCs are applied.  For eigenvalue problems,
-        it can be useful to have non-default ``diag``, to move eigenvalues
-        corresponding to the Dirichlet BCs.
+        Assemble M^T*A*M where A is the finite element matrix corresponding
+        to the finite element form argument.
+
+        Parameters
+        ----------
+        form : Finite element formulation to be assembled
+        apply_bcs : Optional argument indicating whether to apply Dirichlet
+            BCs
+        diag : Where Dirichlet BCs are applied, this value is inserted into
+            the corresponding diagonal entries
+
+        Returns
+        -------
+        The assembled and extracted matrix M^T A M
         """
         A = PETScMatrix(self.comm)
         assemble(form, tensor=A)
-
-        MTAM = self.extractMatrix(A,applyBCs=applyBCs,diag=diag)
-
+        MTAM = self.extract_matrix(A, apply_bcs=applyBCs, diag=diag)
         return MTAM
         
     
@@ -1323,8 +1360,8 @@ class ExtractedSpline:
 
         # really an unnecessary function now that i split out the
         # vector and matrix assembly...
-        return (self.assembleMatrix(lhsForm,applyBCs),
-                self.assembleVector(rhsForm,applyBCs))
+        return (self.assemble_matrix(lhsForm, applyBCs),
+                self.assemble_vector(rhsForm, applyBCs))
         
     def solveLinearSystem(self,MTAM,MTb,u):
         """
@@ -1513,10 +1550,10 @@ class ExtractedSpline:
                 oneConstant = Constant(self.n_fields * (1.0,))
             lhsForm = inner(oneConstant,v)*self.dx
             lhsVecFE = assemble(lhsForm)
-            lhsVec = self.extractVector(lhsVecFE,applyBCs=False)
+            lhsVec = self.extract_vector(lhsVecFE, apply_bcs=False)
             rhsVecFE = assemble(rhsForm)
-            rhsVec = self.extractVector(rhsVecFE,applyBCs=applyBCs)
-            igaDoFs = self.extractVector(Function(self.V).vector())
+            rhsVec = self.extract_vector(rhsVecFE, apply_bcs=applyBCs)
+            igaDoFs = self.extract_vector(Function(self.V).vector())
             as_backend_type(igaDoFs).vec()\
                 .pointwiseDivide(as_backend_type(rhsVec).vec(),
                                  as_backend_type(lhsVec).vec())

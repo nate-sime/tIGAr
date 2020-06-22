@@ -252,7 +252,7 @@ def curvilinearDiv(T):
 # N.b. that, when applied to tensor-valued f, f is considered to be
 # in the Cartesian coordinates of the physical configuration, NOT in the
 # local coordinate chart w.r.t. which derivatives are taken by FEniCS
-def cartesianGrad(f,F):
+def cartesian_grad(f, F):
     """
     The gradient of an arbitrary-rank tensor ``f`` in spatial Cartesian
     coordinates, assuming the parametric domain has been mapped to its
@@ -266,23 +266,23 @@ def cartesianGrad(f,F):
     #                 *pinvDF[ii[n],ii[n+1]],\
     #                 ii[0:n]+(ii[n+1],))
 
-def cartesianDiv(f,F):
+def cartesian_div(f, F):
     """
     The divergence operator corresponding to ``cartesianGrad(f,F)`` that 
     sums on the last two indices.
     """
     n = rank(f)
     ii = indices(n)
-    return as_tensor(cartesianGrad(f,F)[ii+(ii[n-1],)],ii[0:n-1])
+    return as_tensor(cartesian_grad(f, F)[ii + (ii[n - 1],)], ii[0:n - 1])
 
-def cartesianCurl(f,F):
+def cartesian_curl(f, F):
     """
     The curl operator corresponding to ``cartesianGrad(f,F)``.  For ``f`` of 
     rank 1, it returns a vector in 3D or a scalar in 2D.  For ``f`` scalar
     in 2D, it returns a vector.
     """
     n = rank(f)
-    gradf = cartesianGrad(f,F)
+    gradf = cartesian_grad(f, F)
     if(n==1):
         m = shape(f)[0]
         eps = PermutationSymbol(m)

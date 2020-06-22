@@ -163,9 +163,9 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     converged = False
     for i in range(0,spline.maxIters):
         #MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
-        MTb = spline.assembleVector(residualFormAug,applyBCs=applyBCs)
+        MTb = spline.assemble_vector(residualFormAug, apply_bcs=applyBCs)
         if(i==0 or (not reuseLHS)):
-            MTAM = spline.assembleMatrix(JAug,applyBCs=applyBCs)
+            MTAM = spline.assemble_matrix(JAug, applyBCs=applyBCs)
 
         currentNorm = norm(MTb)
         if(i==0):
