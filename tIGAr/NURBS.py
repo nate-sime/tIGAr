@@ -5,6 +5,8 @@ leverages ``igakit`` to read in NURBS data in PetIGA's format.  The module
 ``igakit`` must be installed for this to be usable.
 """
 
+import numpy
+
 from tIGAr.common import *
 from tIGAr.BSplines import *
 from igakit.io import PetIGA
@@ -43,7 +45,7 @@ class NURBSControlMesh(AbstractControlMesh):
             M = ikNURBS.control.shape[0]
             N = ikNURBS.control.shape[1]
             dim = ikNURBS.control.shape[2]
-            self.bnet = zeros((M*N,dim))
+            self.bnet = numpy.zeros((M*N,dim))
             for j in range(0,N):
                 for i in range(0,M):
                     self.bnet[ij2dof(i,j,M),:]\
@@ -53,7 +55,7 @@ class NURBSControlMesh(AbstractControlMesh):
             N = ikNURBS.control.shape[1]
             O = ikNURBS.control.shape[2]
             dim = ikNURBS.control.shape[3]
-            self.bnet = zeros((M*N*O,dim))
+            self.bnet = numpy.zeros((M*N*O,dim))
             for k in range(0,O):
                 for j in range(0,N):
                     for i in range(0,M):

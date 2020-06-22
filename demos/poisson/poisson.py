@@ -29,15 +29,14 @@ for level, n_ele in enumerate(n_eles):
     # to determine the mapping $\mathbf{F}:\widehat{\Omega}\to\Omega$.
     spline_generator = EqualOrderSpline(1, spline_mesh)
 
-    # quit()
     # Set Dirichlet boundary conditions on the 0-th (and only) field, on both
     # ends of the domain, in both directions.
     field = 0
-    scalarSpline = spline_generator.get_scalar_spline(field)
+    scalar_spline = spline_generator.get_scalar_spline(field)
     for parametricDirection in [0, 1]:
         for side in [0, 1]:
-            sideDofs = scalarSpline.getSideDofs(parametricDirection, side)
-            spline_generator.addZeroDofs(field, sideDofs)
+            sideDofs = scalar_spline.get_side_dofs(parametricDirection, side)
+            spline_generator.add_zero_dofs(field, sideDofs)
 
     # Alternative: set BCs based on location of corresponding control points.
     # (Note that this only makes sense for splineGenerator of type

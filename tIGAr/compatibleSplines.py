@@ -36,7 +36,7 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
     """
     
     nvar = len(degrees)
-    useRect = controlMesh.get_scalar_spline().useRectangularElements()
+    useRect = controlMesh.get_scalar_spline().use_rectangular_elements()
     fields = []
     # i indexes parametric components of the velocity (i.e., scalar fields)
     for i in range(0,nvar):
@@ -57,8 +57,8 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
             # use open knot vector by default or if non-periodic
             if(periodicities==None or (not periodicities[j])):
                 for k in range(0,degree):
-                    knots = concatenate((array([knots[0],]),\
-                                         knots, array([knots[-1],])))
+                    knots = concatenate((numpy.array([knots[0],]),\
+                                         knots, numpy.array([knots[-1],])))
             knotVectors += [knots,]
             scalarDegrees += [degree,]
         fields += [BSpline(scalarDegrees,knotVectors,useRect),]
@@ -73,7 +73,8 @@ class BSplineCompat(AbstractMultiFieldSpline):
     """
     
     # args: controlMesh, RTorN, degrees, periodicities=None,
-    def customSetup(self,args):
+    def __init__(self, control_mesh: AbstractControlMesh, RTorN, degrees,
+                 periodicities=None, comm=MPI.comm_world):
         """
         The first argument is an ``AbstractControlMesh``, the second is
         a string containing "RT" or "N", the third is a list of polynomial
@@ -81,16 +82,15 @@ class BSplineCompat(AbstractMultiFieldSpline):
         a list of Booleans indicating periodicity along the parametric 
         directions.
         """
-        self.controlMesh = args[0]
-        self.RTorN = args[1]
-        self.degrees = args[2]
-        if(len(args)>3):
-            self.periodicities = args[3]
-        else:
-            self.periodicities = None
+        self.controlMesh = control_mesh
+        self.RTorN = RTorN
+        self.degrees = degrees
+        self.periodicities = periodicities
         self.fields = generateFieldsCompat(self.controlMesh,self.RTorN,
                                            self.degrees,
                                            periodicities=self.periodicities)
+        super(BSplineCompat, self).__init__(comm)
+
     def get_control_mesh(self):
         return self.controlMesh
 

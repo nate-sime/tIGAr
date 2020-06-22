@@ -115,13 +115,13 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
     #def getParametricDimension(self):
     #    return self.nvar
 
-    def getPrealloc(self):
+    def get_prealloc(self):
         return self.maxNshl
     
-    def useRectangularElements(self):
+    def use_rectangular_elements(self) -> bool:
         return self.useRect
 
-    def needsDG(self):
+    def needs_dg(self):
         return False
     
     def getNodesAndEvals(self,xi):
@@ -136,7 +136,7 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
             nodesAndEvals +=[[nodes[i],evals[i]],]
         return nodesAndEvals
 
-    def generateMesh(self,comm=worldcomm):
+    def generate_mesh(self, comm=worldcomm):
         # brute force approach: write out an xml file on mpi task zero, then
         # read it back in in parallel
         #
@@ -230,10 +230,10 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
         
         return mesh
 
-    def getNcp(self):
+    def get_ncp(self):
         return self.ncp
 
-    def getDegree(self):
+    def get_degree(self):
         if(self.useRect):
             return 3
         else:
@@ -261,7 +261,7 @@ class RhinoTSplineControlMesh(AbstractControlMesh):
         f.close()
 
         lines = fs.split("\n")
-        nnode = self.scalarSpline.getNcp()
+        nnode = self.scalarSpline.get_ncp()
         self.bnet = zeros((nnode,self.nsd+1))
         for i in range(0,nnode):
             # for manually-modified format

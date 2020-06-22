@@ -44,8 +44,8 @@ for level in range(0,N_LEVELS):
 
     # Create a control mesh for which $\Omega = \widehat{\Omega}$.
     splineMesh = ExplicitBSplineControlMesh([p,q],
-                                            [uniformKnots(p,-1.0,1.0,NELu),
-                                             uniformKnots(q,-1.0,1.0,NELv)])
+                                            [uniform_knots(p, -1.0, 1.0, NELu),
+                                             uniform_knots(q, -1.0, 1.0, NELv)])
 
     # Create a spline generator for a spline with a single scalar field on the
     # given control mesh, where the scalar field is the same as the one used
@@ -56,14 +56,14 @@ for level in range(0,N_LEVELS):
     # ends of the domain, in both directions, for two layers of control points.
     # This strongly enforces BOTH $u=0$ and $\nabla u\cdot\mathbf{n}=0$. 
     field = 0
-    scalarSpline = splineGenerator.getScalarSpline(field)
+    scalarSpline = splineGenerator.get_scalar_spline(field)
     for parametricDirection in [0,1]:
         for side in [0,1]:
-            sideDofs = scalarSpline.getSideDofs(parametricDirection,side,
+            sideDofs = scalarSpline.get_side_dofs(parametricDirection, side,
+                                                  ##############################
+                                                  n_layers=2) # two layers of CPs
                                                 ##############################
-                                                nLayers=2) # two layers of CPs
-                                                ##############################
-            splineGenerator.addZeroDofs(field,sideDofs)
+            splineGenerator.add_zero_dofs(field, sideDofs)
 
     # Write extraction data to the filesystem.
     DIR = "./extraction"

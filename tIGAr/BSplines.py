@@ -18,16 +18,15 @@ def uniform_knots(p: int, xi0: float, xi1: float, n_elements: int,
     """
     Parameters
     ----------
-    p : spline degree
-    xi0 : knot start
-    xi1 : knot end
-    n_elements : number of elements in the knot vector
-    periodic : if False repeat end knots ``p+1`` times
+    p : Spline degree
+    xi0 : Knot start
+    xi1 : Knot end
+    n_elements : Number of elements in the knot vector
+    periodic : If False repeat end knots ``p+1`` times
 
     Returns
     -------
-    list
-        the generated knot vector
+    The generated knot vector
     """
     knots = numpy.linspace(xi0, xi1, n_elements+1).tolist()
     if not periodic:
@@ -413,7 +412,7 @@ class BSpline(AbstractScalarBasis):
     #def getParametricDimension(self):
     #    return self.nvar
 
-    def needsDG(self):
+    def needs_dg(self):
         """
         Returns a Boolean, indicating whether or not the extraction requires
         DG element (due to the function space being discontinuous somewhere).
@@ -423,7 +422,7 @@ class BSpline(AbstractScalarBasis):
                 return True
         return False
 
-    def useRectangularElements(self):
+    def use_rectangular_elements(self):
         """
         Returns a Boolean indicating whether or not the basis should use
         rectangular elements in its extraction.
@@ -431,7 +430,7 @@ class BSpline(AbstractScalarBasis):
         return self.use_rect
 
     # non-default implementation, optimized for B-splines
-    def getPrealloc(self):
+    def get_prealloc(self):
         totalFuncs = 1
         for spline in self.splines:
             # a 1d b-spline should have p+1 active basis functions at any given
@@ -499,7 +498,7 @@ class BSpline(AbstractScalarBasis):
                                     dersu[i]*dersv[j]*dersw[k]],]
             return retval
         
-    def generateMesh(self,comm=worldcomm):
+    def generate_mesh(self, comm=worldcomm):
         if(self.nvar == 1):
             spline = self.splines[0]
             mesh = IntervalMesh(comm,spline.nel,0.0,float(spline.nel))
@@ -571,10 +570,10 @@ class BSpline(AbstractScalarBasis):
             prod *= self.splines[i].getNcp()
         return prod
 
-    def getNcp(self):
+    def get_ncp(self):
         return self.ncp
 
-    def getDegree(self):
+    def get_degree(self):
         deg = 0
         for i in range(0,self.nvar):
             # for simplex elements; take max for rectangles
@@ -584,27 +583,38 @@ class BSpline(AbstractScalarBasis):
                 deg += self.splines[i].p
         return deg
 
-    def compute_nel(self):
+    def compute_nel(self) -> int:
         """
-        Returns the number of Bezier elements in the B-spline.
+        Returns
+        -------
+        The number of Bezier elements in the B-spline.
         """
         nel = 1
         for spline in self.splines:
             nel *= spline.nel
         return nel
     
-    def getSideDofs(self,direction,side,nLayers=1):
+    def get_side_dofs(self, direction: int, side: int, n_layers: int = 1) -> \
+            typing.List[int]:
         """
-        Return the DoFs on a ``side`` (zero or one) that is perpendicular 
-        to a parametric ``direction`` (0, 1, or 2, capped at 
-        ``self.nvar-1``, obviously).  Can optionally constrain more than
-        one layer of control points (e.g., for strongly-enforced clamped BCs
-        on Kirchhoff--Love shells) using ``nLayers`` greater than its
-        default value of one.
+        Return the DoFs on a ``side`` that is perpendicular to the parametric
+        ``direction``.  Can optionally retrieve more than one layer of control
+        points (e.g., for strongly-enforced clamped BCs on Kirchhoff--Love
+        shells) using ``n_layers``.
+
+        Parameters
+        ----------
+        direction: Parametric direction (0, 1, 2) -> (u, v, w)
+        side: Knotvector side (0, 1) -> ('left', 'right')
+        n_layers: Number of layers of degrees of freedom to be retrieved
+
+        Returns
+        -------
+        A list of DoFs
         """
         offsetSign = 1-2*side
         retval = []
-        for absOffset in range(0,nLayers):
+        for absOffset in range(0, n_layers):
             offset = absOffset*offsetSign
             if(side == 0):
                 i=0
@@ -676,7 +686,7 @@ class MultiBSpline(AbstractScalarBasis):
         ncp = 0
         for s in self.splines:
             self.doffsets += [ncp,]
-            ncp += s.getNcp()
+            ncp += s.get_ncp()
 
         self.nvar = self.splines[0].nvar
         self.useRect = self.splines[0].useRect
@@ -694,10 +704,10 @@ class MultiBSpline(AbstractScalarBasis):
         return nel
         
     # TODO: this should not need to exist
-    def needsDG(self):
+    def needs_dg(self):
         return False
 
-    def useRectangularElements(self):
+    def use_rectangular_elements(self):
         """
         Returns a Boolean indicating whether or not the basis should use
         rectangular elements in its extraction.
@@ -705,8 +715,8 @@ class MultiBSpline(AbstractScalarBasis):
         return self.useRect
 
     # non-default implementation, optimized for B-splines
-    def getPrealloc(self):
-        return self.splines[0].getPrealloc()
+    def get_prealloc(self):
+        return self.splines[0].get_prealloc()
     
     def getNodesAndEvals(self,xi):
         patch = self.patchFromCoordinates(xi)
@@ -728,7 +738,7 @@ class MultiBSpline(AbstractScalarBasis):
         retval[0] = xi[0] - 2.0*float(patchIndex)
         return retval
 
-    def generateMesh(self,comm=worldcomm):
+    def generate_mesh(self, comm=worldcomm):
 
         MESH_FILE_NAME = generateMeshXMLFileName(comm)
         
@@ -882,15 +892,15 @@ class MultiBSpline(AbstractScalarBasis):
     def computeNcp(self):
         ncp = 0
         for s in self.splines:
-            ncp += s.getNcp()
+            ncp += s.get_ncp()
         return ncp
 
-    def getNcp(self):
+    def get_ncp(self):
         return self.ncp
 
-    def getDegree(self):
+    def get_degree(self):
         # assumes all splines have same degree
-        return self.splines[0].getDegree()
+        return self.splines[0].get_degree()
 
     def getPatchSideDofs(self,patch,direction,side,nLayers=1):
         """
@@ -898,7 +908,7 @@ class MultiBSpline(AbstractScalarBasis):
         it has an extra argument ``patch`` to indicate which patch to obtain
         DoFs from.  The returned DoFs are in the global numbering.
         """
-        localSideDofs = self.splines[patch].getSideDofs(direction,side,nLayers)
+        localSideDofs = self.splines[patch].get_side_dofs(direction, side, nLayers)
         retval = []
         for dof in localSideDofs:
             retval += [self.globalDofIndex(dof,patch),]
@@ -940,7 +950,7 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
         self.nvar = len(degrees)
         self.nsd = self.nvar + extra_dim
 
-    def get_scalar_spline(self):
+    def get_scalar_spline(self) -> AbstractScalarBasis:
         return self.scalar_spline
         
     def get_homogeneous_coordinate(self, node, direction):
@@ -1039,7 +1049,7 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
                 kvec = []
                 for s in kvecStrs:
                     kvec += [float(s),]
-                kvecs += [array(kvec),]
+                kvecs += [numpy.array(kvec),]
 
             # Use the knot vectors to create a B-spline basis for this patch
             splines += [BSpline(degrees,kvecs,useRect,overRefine),]
@@ -1081,11 +1091,12 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
     # TODO: include some functionality to match up CPs w/in epsilon of
     # each other and construct an IPER array.  (Cf. TODO in MultiBSpline.)
     # Should be able to use the SciPy KD tree to do this in a few lines.
-        
-    # Required interface for an AbstractControlMesh:
+
     def get_homogeneous_coordinate(self, node, direction):
-        return self.bnet[node,direction]
-    def get_scalar_spline(self):
+        return self.bnet[node, direction]
+
+    def get_scalar_spline(self) -> AbstractScalarBasis:
         return self.scalarSpline
-    def get_nsd(self):
+
+    def get_nsd(self) -> int:
         return self.nsd

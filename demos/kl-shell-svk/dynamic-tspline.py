@@ -72,7 +72,7 @@ class BdryDomain(SubDomain):
 # for degrees of freedom corresponding to control points located in
 # the SubDomain BdryDomain.
 for i in range(0,3):
-    splineGenerator.addZeroDofsByLocation(BdryDomain(),i)
+    splineGenerator.add_zero_dofs_by_location(BdryDomain(), i)
 
 # Write the extraction data.
 DIR = "./extraction"
@@ -302,14 +302,14 @@ for i in range(0,50):
     d2File << d2
     # (Note that the components of spline.F are rational, and cannot be
     # directly outputted to ParaView files.)
-    spline.cpFuncs[0].rename("F0","F0")
-    spline.cpFuncs[1].rename("F1","F1")
-    spline.cpFuncs[2].rename("F2","F2")
-    spline.cpFuncs[3].rename("F3","F3")
-    F0File << spline.cpFuncs[0]
-    F1File << spline.cpFuncs[1]
-    F2File << spline.cpFuncs[2]
-    F3File << spline.cpFuncs[3]
+    spline.cp_funcs[0].rename("F0", "F0")
+    spline.cp_funcs[1].rename("F1", "F1")
+    spline.cp_funcs[2].rename("F2", "F2")
+    spline.cp_funcs[3].rename("F3", "F3")
+    F0File << spline.cp_funcs[0]
+    F1File << spline.cp_funcs[1]
+    F2File << spline.cp_funcs[2]
+    F3File << spline.cp_funcs[3]
 
     # Advance to the next time step.
     timeInt.advance()

@@ -33,14 +33,14 @@ NELv = 10
 degs = [2,2]
 
 # Generate open knot vectors for each direction.
-kvecs = [uniformKnots(degs[0],-1.0,1.0,NELu),
-         uniformKnots(degs[1],-1.0,1.0,NELv)]
+kvecs = [uniform_knots(degs[0], -1.0, 1.0, NELu),
+         uniform_knots(degs[1], -1.0, 1.0, NELv)]
 
 # Generate an explicit B-spline control mesh.  The argument extraDim allows
 # for increasing the dimension of physical space beyond that of parametric
 # space.  We want to model deformations in 3D, so one extra dimension is
 # required of physical space.
-controlMesh = ExplicitBSplineControlMesh(degs,kvecs,extraDim=1)
+controlMesh = ExplicitBSplineControlMesh(degs, kvecs, extra_dim=1)
 
 # Create a spline generator with three unknown fields for the displacement
 # components.  
@@ -48,16 +48,16 @@ splineGenerator = EqualOrderSpline(3,controlMesh)
 
 # Apply clamped boundary conditions to the displacement.  (Pinned BCs are in
 # comments, but need more load steps and/or a smaller load to converge.)
-scalarSpline = splineGenerator.getControlMesh().getScalarSpline()
+scalarSpline = splineGenerator.get_control_mesh().get_scalar_spline()
 for side in range(0,2):
     for direction in range(0,2):
-        sideDofs = scalarSpline.getSideDofs(direction,side,
-                                            ########################
-                                            nLayers=2) # clamped BC
+        sideDofs = scalarSpline.get_side_dofs(direction, side,
+                                              ########################
+                                              n_layers=2) # clamped BC
                                             #nLayers=1) # pinned BC
                                             ########################
         for i in range(0,3):
-            splineGenerator.addZeroDofs(i,sideDofs)
+            splineGenerator.add_zero_dofs(i, sideDofs)
 
 # Write extraction data to the filesystem.
 DIR = "./extraction"

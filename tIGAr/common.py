@@ -7,31 +7,25 @@ importing this module, a number of setup steps are carried out
 (e.g., initializing MPI).
 """
 
+import functools
+import typing
+import numpy
+import abc
+import scipy.stats
+
 import dolfin
 from dolfin import *
 import petsc4py, sys
 petsc4py.init(sys.argv)
 from petsc4py import PETSc
 
-import math
-import numpy
-import abc
-# from numpy import array
-# from numpy import extract
-from scipy.stats import mode
-# from numpy import argsort
-# from numpy import zeros
-# from numpy import full
-# from numpy import transpose as npTranspose
-# from numpy import arange
-
 import ufl.equation
 
-#from dolfin import MPI, mpi_comm_world
 
-if(parameters["linear_algebra_backend"] != 'PETSc'):
+if parameters["linear_algebra_backend"] != "PETSc":
     print("ERROR: tIGAr requires PETSc.")
     exit()
+
 
 worldcomm = MPI.comm_world
 selfcomm = MPI.comm_self
@@ -145,30 +139,30 @@ class AbstractExtractionGenerator(abc.ABC):
         Otherwise, it is treated as if it were the first argument in ``args``.
         """
         self.comm = comm
-        self.mesh = self.generateMesh()
+        self.mesh = self.generate_mesh()
 
         # note: if self.nsd is set in a customSetup, then the subclass
         # getNsd() references that, this is still safe
         self.nsd = self.get_nsd()
 
-        self.VE_control = FiniteElement(self.extractionElement(),
+        self.VE_control = FiniteElement(self.extraction_element(),
                                         self.mesh.ufl_cell(),
-                                        self.getDegree(-1))
+                                        self.get_degree(-1))
         self.V_control = FunctionSpace(self.mesh, self.VE_control)
 
         if self.get_num_fields() > 1:
             VE_components = []
             for i in range(0, self.get_num_fields()):
                 VE_components \
-                    += [FiniteElement(self.extractionElement(),
+                    += [FiniteElement(self.extraction_element(),
                                       self.mesh.ufl_cell(),
-                                      self.getDegree(i)), ]
+                                      self.get_degree(i)), ]
 
             self.VE = MixedElement(tuple(VE_components))
         else:
-            self.VE = FiniteElement(self.extractionElement(),
+            self.VE = FiniteElement(self.extraction_element(),
                                     self.mesh.ufl_cell(),
-                                    self.getDegree(0))
+                                    self.get_degree(0))
 
         self.V = FunctionSpace(self.mesh, self.VE)
 
@@ -203,7 +197,7 @@ class AbstractExtractionGenerator(abc.ABC):
             as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
 
         # may need to be permuted
-        self.zeroDofs = []  # self.generateZeroDofs()
+        self.zero_dofs = []  # self.generateZeroDofs()
 
         # replace M with permuted version
         # if(mpisize > 1):
@@ -235,65 +229,84 @@ class AbstractExtractionGenerator(abc.ABC):
 
     # what type of element (CG or DG) to extract to
     # (override in subclass for non-default behavior)
-    def useDG(self):
+    def use_dg(self) -> bool:
         """
-        Returns a Boolean, indicating whether or not to use DG elements 
-        in extraction.
+        Returns
+        -------
+        Indicate whether or not to use DG elements in extraction.
         """
         return USE_DG_DEFAULT
     
-    def extractionElement(self):
+    def extraction_element(self):
         """
-        Returns a string indicating what type of FE to use in extraction.
+        Returns
+        -------
+        Indicate what type of finite element to use in extraction.
         """
-        return "DG" if self.useDG() else "Lagrange"
-        
-    @abc.abstractmethod
-    def customSetup(self, args):
-        """
-        Customized instructions to execute during initialization.  ``args``
-        is a tuple of custom arguments.
-        """
-        pass
+        return "DG" if self.use_dg() else "Lagrange"
 
     @abc.abstractmethod
     def get_num_fields(self) -> int:
         """
-        Returns the number of unknown fields for the spline.
+        Returns
+        -------
+        The number of unknown fields for the spline.
         """
         pass
 
     @abc.abstractmethod
-    def get_homogeneous_coordinate(self, node, direction):
+    def get_homogeneous_coordinate(self, node: int, direction: int):
         """
-        Return the ``direction``-th homogeneous coordinate of the ``node``-th
-        control point of the spline.
+        Get the homogeneous coordinate of a specified spline control point node
+        in the given direction.
+
+        Parameters
+        ----------
+        node: Spline control point node index
+        direction: Homogeneous coordinate index
         """
         pass
 
     @abc.abstractmethod
-    def generateMesh(self):
+    def generate_mesh(self) -> dolfin.Mesh:
         """
-        Generate and return an FE mesh suitable for extracting the 
-        subclass's spline space.
+        Generate and return an FE mesh suitable for extracting the spline space.
+
+        Returns
+        -------
+        Corresponding DOLFIN FE mesh
         """
         pass
 
     @abc.abstractmethod
-    def getDegree(self,field):
+    def get_degree(self, field: int) -> int:
         """
-        Return the degree of polynomial to be used in the extracted
-        representation of a given ``field``, with ``-1`` being the 
-        control field.
+        Parameters
+        ----------
+        field: Field index. ``-1`` corresponds to the degree of the control
+            field.
+
+        Returns
+        -------
+        Degree of polynomial in extracted representation.
         """
         pass
 
     @abc.abstractmethod
-    def getNcp(self,field):
+    def get_ncp(self, field: int) -> int:
         """
-        Return the total number of degrees of freedom of a given ``field``,
-        with field ``-1`` being the control mesh field.
+        Parameters
+        ----------
+        field: Field index. ``-1`` corresponds to the control mesh field.
+
+        Returns
+        -------
+        Total number of degrees of freedom of the given field.
         """
+        # """
+        # Return the total number of degrees of freedom of a given ``field``,
+        # with field ``-1`` being the control mesh field.
+        # """
         pass
 
     @abc.abstractmethod
@@ -312,7 +325,7 @@ class AbstractExtractionGenerator(abc.ABC):
         # offset localDof by 
         retval = localDof
         for i in range(0,field):
-            retval += self.getNcp(i)
+            retval += self.get_ncp(i)
         return retval
     
     def generatePermutation(self):
@@ -326,36 +339,47 @@ class AbstractExtractionGenerator(abc.ABC):
         return generateIdentityPermutation\
             (self.M.mat().getOwnershipRangeColumn(),self.comm)
         
-    def addZeroDofsGlobal(self,newDofs):
+    def add_zero_dofs_global(self, new_dofs: typing.List[int]):
         """
-        Adds new DoFs in the list ``newDofs`` in global numbering 
-        to the list of DoFs to which
-        homogeneous Dirichlet BCs will be applied during analysis.
-        """
-        self.zeroDofs += newDofs
-        
-    def addZeroDofs(self,field,newDofs):
-        """
-        Adds new DoFs in the list ``newDofs`` in local numbering for a 
-        given ``field`` to the list of DoFs to which
-        homogeneous Dirichlet BCs will be applied during analysis.
-        """
-        newDofsGlobal = newDofs[:]
-        for i in range(0,len(newDofs)):
-            newDofsGlobal[i] = self.globalDof(field,newDofs[i])
-        self.addZeroDofsGlobal(newDofsGlobal)
-    
-    def getPrealloc(self,control):
-        """
-        Returns the number of entries per row needed in the extraction matrix.
-        The parameter ``control`` is a Boolean indicating whether or not this 
-        is the preallocation for the scalar field used for control point 
-        coordinates.
+        Add new DoFs in global numerical to the list of DoFs to which
+        homogeneous BCs will be applied.
 
+        Parameters
+        ----------
+        new_dofs: Global numbering of new DoFs
+        """
+        self.zero_dofs += new_dofs
+        
+    def add_zero_dofs(self, field: int, new_dofs: typing.List[int]):
+        """
+        Apply homogeneous Dirichlet BCs to the provided DoFs.
+
+        Parameters
+        ----------
+        field: Field index
+        new_dofs: Local numbering of new DoFs
+        """
+        new_dofs_global = new_dofs[:]
+        for i in range(0, len(new_dofs)):
+            new_dofs_global[i] = self.globalDof(field, new_dofs[i])
+        self.add_zero_dofs_global(new_dofs_global)
+    
+    def get_prealloc(self, control: bool) -> int:
+        """
+        Parameters
+        ----------
+        control: Indicating whether or not this is the preallocation for the
+            scalar field used for control point coordinates.
+
+        Returns
+        -------
+        The number of entries per row needed in the extraction matrix
+
+        Note
+        ----
         If left as the default, this could potentially slow down drastically
         for very high-order splines, or waste a lot of memory for low order
-        splines.  In general, it is a good idea to override this in 
-        subclasses.
+        splines. In general, it is a good idea to override this in subclasses.
         """
         return DEFAULT_PREALLOC
 
@@ -395,7 +419,7 @@ class AbstractExtractionGenerator(abc.ABC):
         #
         # self.VE_control = FiniteElement(self.extractionElement(),\
         #                                 self.mesh.ufl_cell(),\
-        #                                 self.getDegree(-1))
+        #                                 self.get_degree(-1))
         # self.V_control = FunctionSpace(self.mesh,self.VE_control)
         #
         # if(self.getNFields() > 1):
@@ -404,13 +428,13 @@ class AbstractExtractionGenerator(abc.ABC):
         #         VE_components \
         #             += [FiniteElement(self.extractionElement(),\
         #                               self.mesh.ufl_cell(),\
-        #                               self.getDegree(i)),]
+        #                               self.get_degree(i)),]
         #
         #     self.VE = MixedElement(tuple(VE_components))
         # else:
         #     self.VE = FiniteElement(self.extractionElement(),\
         #                             self.mesh.ufl_cell(),\
-        #                             self.getDegree(0))
+        #                             self.get_degree(0))
         #
         # self.V = FunctionSpace(self.mesh,self.VE)
         #
@@ -468,7 +492,7 @@ class AbstractExtractionGenerator(abc.ABC):
         # #    self.zeroDofs = self.permutationAO.app2petsc\
         # #                    (zeroDofIS).getIndices()
             
-    def applyPermutation(self):
+    def apply_permutation(self):
         """
         Permutes the order of the IGA degrees of freedom, so that their
         parallel partitioning better aligns with that of the FE degrees 
@@ -492,8 +516,8 @@ class AbstractExtractionGenerator(abc.ABC):
                              generateIdentityPermutation\
                              (self.M.mat().getOwnershipRangeColumn(),self.comm))
             zeroDofIS = PETSc.IS(self.comm)
-            zeroDofIS.createGeneral(array(self.zeroDofs,dtype=INDEX_TYPE))
-            self.zeroDofs = self.permutationAO.app2petsc\
+            zeroDofIS.createGeneral(array(self.zero_dofs, dtype=INDEX_TYPE))
+            self.zero_dofs = self.permutationAO.app2petsc\
                             (zeroDofIS).getIndices()
     
     def writeExtraction(self,dirname,doPermutation=DEFAULT_DO_PERMUTATION):
@@ -518,7 +542,7 @@ class AbstractExtractionGenerator(abc.ABC):
         # - File for each processor listing zero-ed dofs
 
         if(doPermutation):
-            self.applyPermutation()
+            self.apply_permutation()
         
 
         # write HDF file
@@ -547,7 +571,7 @@ class AbstractExtractionGenerator(abc.ABC):
         #f.write(fs)
         #f.close()
         zeroDofIS = PETSc.IS(self.comm)
-        zeroDofIS.createGeneral(numpy.array(self.zeroDofs,dtype=INDEX_TYPE))
+        zeroDofIS.createGeneral(numpy.array(self.zero_dofs, dtype=INDEX_TYPE))
         viewer = PETSc.Viewer(self.comm)\
                       .createBinary(dirname+"/"+EXTRACTION_ZERO_DOFS_FILE, 'w')
         viewer(zeroDofIS)
@@ -555,11 +579,11 @@ class AbstractExtractionGenerator(abc.ABC):
         # write info
         if(mpirank == 0):
             fs = str(self.nsd) +"\n" \
-                 + self.extractionElement() +"\n" \
+                 + self.extraction_element() + "\n" \
                  + str(self.get_num_fields()) + "\n"
             for i in range(-1, self.get_num_fields()):
-                fs += str(self.getDegree(i))+"\n"\
-                      + str(self.getNcp(i))+"\n"
+                fs += str(self.get_degree(i)) +"\n" \
+                      + str(self.get_ncp(i)) + "\n"
             f = open(dirname+"/"+EXTRACTION_INFO_FILE,'w')
             f.write(fs)
             f.close()
@@ -726,9 +750,8 @@ class ExtractedNonlinearSolver:
 #            phi[i] = phi[i]/w
 #        self.expr.eval(values,array(phi))
 
-# could represent any sort of spline that is extractable
-class ExtractedSpline(object):
 
+class ExtractedSpline:
     """
     A class representing an extracted spline.  The idea is that all splines
     look the same after extraction, so there is no need for a proliferation
@@ -736,47 +759,54 @@ class ExtractedSpline(object):
     extraction generators).  
     """
 
-    def __init__(self,sourceArg,quadDeg,mesh=None,
-                 doPermutation=DEFAULT_DO_PERMUTATION,comm=worldcomm):
-        """
-        Generates instance from extraction data in ``sourceArg``, which
-        might either be an ``AbstractExtractionGenerator`` or the name of
-        a directory containing extraction data.
-        Optionally takes a ``mesh`` argument, so that function spaces can be
-        established on the same mesh as an existing spline object for
-        facilitating segregated solver schemes.  (Splines common to one
-        set of extraction data are always treated as a monolothic mixed
-        function space.)  This parameter is ignored if ``sourceArg`` is an
-        extraction generator, in which case the generator's mesh is always
-        used.  Everything to do with the spline is integrated 
-        using a quadrature rule of degree ``quadDeg``.
-        The argument ``doPermutation`` chooses whether or not to apply a
-        permutation to the IGA DoF order.  It is ignored if reading
-        extraction data from the filesystem.  The argument ``comm`` is an
-        MPI communicator that for the object that is ignored if ``sourceArg``
-        is a generator.  (In that case, the communicator is the same as that
-        of the generator.)
-        """
+    @functools.singledispatchmethod
+    def __init__(self, arg):
+        raise NotImplementedError(
+            "Constructor not implemented for %s" % str(type(arg)))
 
-        if(isinstance(sourceArg,AbstractExtractionGenerator)):
-            if(mesh != None and mpirank==0):
-                print("WARNING: Parameter 'mesh' ignored.  Using mesh from "+
-                      "extraction generator instead.")
-            self.initFromGenerator(sourceArg,quadDeg,doPermutation)
-        else:
-            self.initFromFilesystem(sourceArg,quadDeg,comm,mesh)
+    @__init__.register
+    def _(self, extraction_generator: AbstractExtractionGenerator,
+          quad_deg: int, do_permutation: bool=DEFAULT_DO_PERMUTATION):
+        """
+        Parameters
+        ----------
+        extraction_generator: Spline extraction
+        quad_deg: Quadrature degree using in integration of spline
+        do_permutation: Choose whether or not to apply a permutation to the IGA
+            DoF order
+        """
+        self.init_from_generator(extraction_generator, quad_deg, do_permutation)
+        self.generic_setup()
+
+    @__init__.register
+    def _(self, file_path: str, quad_deg: int, mesh: dolfin.Mesh,
+          comm=MPI.comm_world):
+        """
+        Parameters
+        ----------
+        file_path: Corresponding to directory containing spline extraction data
+        quad_deg: Quadrature degree using in integration of spline
+        mesh: Function spaces can be established on the same mesh as an
+            existing spline object for facilitating segregated solver schemes.
+            (Splines common to one set of extraction data are always treated
+            as a monolothic mixed function space.)
+        comm: MPI communicator
+        """
+        self.init_from_filesystem(file_path, quad_deg, comm, mesh)
+        self.generic_setup()
             
-        self.genericSetup()
-            
-    def initFromGenerator(self,generator,quadDeg,
-                          doPermutation=DEFAULT_DO_PERMUTATION):
+    def init_from_generator(self, generator: AbstractExtractionGenerator,
+                            quad_deg: int,
+                            doPermutation: bool = DEFAULT_DO_PERMUTATION):
         """
         Generates instance from an ``AbstractExtractionGenerator``, without
         passing through the filesystem.  This mainly exists to circumvent
         broken parallel HDF5 file output for quads and hexes in 2017.2 
         (See Issue #1000 for DOLFIN on Bitbucket.)  
-        
-        NOTE: While seemingly-convenient for small-scale testing/demos, and 
+
+        Notes
+        -----
+        While seemingly-convenient for small-scale testing/demos, and
         more robust in the sense that it makes no assumptions about the
         DoF ordering in FunctionSpaces being deterministic,
         this is not the preferred workflow for most realistic 
@@ -784,19 +814,17 @@ class ExtractedSpline(object):
         execute every time the analysis code is run.  
         """
 
-        if(doPermutation):
-            generator.applyPermutation()
+        if doPermutation:
+            generator.apply_permutation()
         
-        self.quadDeg = quadDeg
+        self.quad_deg = quad_deg
         self.nsd = generator.get_nsd()
-        self.elementType = generator.extractionElement()
-        self.nFields = generator.get_num_fields()
-        self.p_control = generator.getDegree(-1)
-        self.p = []
-        for i in range(0,self.nFields):
-            self.p += [generator.getDegree(i)]
+        self.element_type = generator.extraction_element()
+        self.n_fields = generator.get_num_fields()
+        self.p_control = generator.get_degree(-1)
+        self.p = [generator.get_degree(i) for i in range(0, self.n_fields)]
         self.mesh = generator.mesh
-        self.cpFuncs = generator.cpFuncs
+        self.cp_funcs = generator.cpFuncs
         self.VE = generator.VE
         self.VE_control = generator.VE_control
         self.V = generator.V
@@ -804,11 +832,13 @@ class ExtractedSpline(object):
         self.M = generator.M
         self.M_control = generator.M_control
         self.comm = generator.getComm()
-        zeroDofIS = PETSc.IS(self.comm)
-        zeroDofIS.createGeneral(numpy.array(generator.zeroDofs,dtype=INDEX_TYPE))
-        self.zeroDofs = zeroDofIS
+        zero_dof_is = PETSc.IS(self.comm)
+        zero_dof_is.createGeneral(
+            numpy.array(generator.zero_dofs, dtype=INDEX_TYPE))
+        self.zero_dofs = zero_dof_is
             
-    def initFromFilesystem(self,dirname,quadDeg,comm,mesh=None):
+    def init_from_filesystem(self, dir_name: str, quad_deg: int, comm,
+                             mesh: dolfin.Mesh=None):
 
         """
         Generates instance from extraction data in directory ``dirname``. 
@@ -820,20 +850,20 @@ class ExtractedSpline(object):
         using a quadrature rule of degree ``quadDeg``.
         """
 
-        self.quadDeg = quadDeg
+        self.quad_deg = quad_deg
         self.comm = comm
 
         # read function space info
-        f = open(dirname+"/"+EXTRACTION_INFO_FILE,'r')
+        f = open(dir_name + "/" + EXTRACTION_INFO_FILE, 'r')
         fs = f.read()
         f.close()
         lines = fs.split('\n')
         lineCount = 0
         self.nsd = int(lines[lineCount])
         lineCount += 1
-        self.elementType = lines[lineCount]
+        self.element_type = lines[lineCount]
         lineCount += 1
-        self.nFields = int(lines[lineCount])
+        self.n_fields = int(lines[lineCount])
         lineCount += 1
         self.p_control = int(lines[lineCount])
         lineCount += 1
@@ -841,7 +871,7 @@ class ExtractedSpline(object):
         lineCount += 1
         self.p = []
         ncp = []
-        for i in range(0,self.nFields):
+        for i in range(0, self.n_fields):
             self.p += [int(lines[lineCount]),]
             lineCount += 1
             ncp += [int(lines[lineCount]),]
@@ -852,7 +882,7 @@ class ExtractedSpline(object):
 
         # read mesh if none provided
         #f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,'r')
-        f = HDF5File(self.comm,dirname+"/"+EXTRACTION_DATA_FILE,'r')
+        f = HDF5File(self.comm, dir_name + "/" + EXTRACTION_DATA_FILE, 'r')
         if(mesh==None):
             self.mesh = Mesh(self.comm)
 
@@ -866,35 +896,35 @@ class ExtractedSpline(object):
         
         # create function spaces
         self.VE_control\
-            = FiniteElement(self.elementType,self.mesh.ufl_cell(),\
+            = FiniteElement(self.element_type, self.mesh.ufl_cell(), \
                             self.p_control)
         self.V_control\
             = FunctionSpace(self.mesh,self.VE_control)
 
-        if(self.nFields > 1):
+        if(self.n_fields > 1):
             VE_components = []
-            for i in range(0,self.nFields):
+            for i in range(0, self.n_fields):
                 VE_components \
-                    += [FiniteElement(self.elementType,self.mesh.ufl_cell(),\
+                    += [FiniteElement(self.element_type, self.mesh.ufl_cell(), \
                                       self.p[i]),]
             self.VE = MixedElement(tuple(VE_components))
         else:
-            self.VE = FiniteElement(self.elementType,self.mesh.ufl_cell(),\
+            self.VE = FiniteElement(self.element_type, self.mesh.ufl_cell(), \
                                     self.p[0])
             
         self.V = FunctionSpace(self.mesh,self.VE)
         
         # read control functions
-        self.cpFuncs = []
+        self.cp_funcs = []
         for i in range(0,self.nsd+1):
-            self.cpFuncs += [Function(self.V_control),]
-            f.read(self.cpFuncs[i],\
+            self.cp_funcs += [Function(self.V_control), ]
+            f.read(self.cp_funcs[i], \
                    EXTRACTION_H5_CONTROL_FUNC_NAME(i))
         f.close()
         
         # read extraction matrix and create transpose for control space
         Istart, Iend = as_backend_type\
-                       (self.cpFuncs[0].vector()).vec().getOwnershipRange()
+                       (self.cp_funcs[0].vector()).vec().getOwnershipRange()
         nLocalNodes = Iend - Istart
         MPETSc = PETSc.Mat(self.comm)
         MPETSc.create(PETSc.COMM_WORLD)
@@ -908,8 +938,8 @@ class ExtractedSpline(object):
         #MPETSc.setUp()
         viewer \
             = PETSc.Viewer(self.comm)\
-                   .createBinary(dirname\
-                                 +"/"+EXTRACTION_MAT_FILE_CTRL,'r')
+                   .createBinary(dir_name \
+                                 +"/" + EXTRACTION_MAT_FILE_CTRL,'r')
         
         self.M_control = PETScMatrix(MPETSc.load(viewer))
 
@@ -920,7 +950,7 @@ class ExtractedSpline(object):
                        (Function(self.V).vector()).vec().getOwnershipRange()
         nLocalNodes = Iend - Istart
         totalDofs = 0
-        for i in range(0,self.nFields):
+        for i in range(0, self.n_fields):
             totalDofs += ncp[i]
         MPETSc2 = PETSc.Mat(self.comm)
         MPETSc2.create(PETSc.COMM_WORLD)
@@ -932,7 +962,7 @@ class ExtractedSpline(object):
         #MPETSc2.setUp()
         viewer \
             = PETSc.Viewer(self.comm)\
-                   .createBinary(dirname+"/"+EXTRACTION_MAT_FILE,'r')
+                   .createBinary(dir_name + "/" + EXTRACTION_MAT_FILE, 'r')
         self.M = PETScMatrix(MPETSc2.load(viewer))
 
         # read zero-ed dofs
@@ -952,11 +982,11 @@ class ExtractedSpline(object):
 
         viewer = PETSc.Viewer(self.comm)\
                       .createBinary\
-                      (dirname+"/"+EXTRACTION_ZERO_DOFS_FILE,"r")
-        self.zeroDofs = PETSc.IS(self.comm)
-        self.zeroDofs.load(viewer)
+                      (dir_name + "/" + EXTRACTION_ZERO_DOFS_FILE, "r")
+        self.zero_dofs = PETSc.IS(self.comm)
+        self.zero_dofs.load(viewer)
 
-    def genericSetup(self):
+    def generic_setup(self):
 
         """
         Setup steps to take regardless of the source of extraction data.
@@ -980,7 +1010,7 @@ class ExtractedSpline(object):
         # geometrical mapping
         components = []
         for i in range(0,self.nsd):
-            components += [self.cpFuncs[i]/self.cpFuncs[self.nsd],]
+            components += [self.cp_funcs[i] / self.cp_funcs[self.nsd], ]
         self.F = as_vector(components)
         self.DF = grad(self.F)
 
@@ -997,9 +1027,9 @@ class ExtractedSpline(object):
         self.n = mappedNormal(self.N,self.F)
         
         # integration measures
-        self.dx = tIGArMeasure(volumeJacobian(self.g),dx,self.quadDeg)
-        self.ds = tIGArMeasure(surfaceJacobian(self.g,self.N),\
-                               ds,self.quadDeg,self.boundaryMarkers)
+        self.dx = tIGArMeasure(volumeJacobian(self.g), dx, self.quad_deg)
+        self.ds = tIGArMeasure(surfaceJacobian(self.g,self.N), \
+                               ds, self.quad_deg, self.boundaryMarkers)
 
         # useful for defining Cartesian differential operators
         self.pinvDF = pinvD(self.F)
@@ -1177,7 +1207,7 @@ class ExtractedSpline(object):
         coordinates ``'x[i]'`` in ``expr`` as parametric coordinates.
         Uses quadrature degree of spline object for interpolation degree.
         """
-        return Expression(expr,degree=self.quadDeg)
+        return Expression(expr, degree=self.quad_deg)
 
     def parametricCoordinates(self):
         """
@@ -1199,7 +1229,7 @@ class ExtractedSpline(object):
         Divides its argument ``u`` by the weighting function of the spline's
         control mesh.
         """
-        return u/(self.cpFuncs[self.nsd])
+        return u/(self.cp_funcs[self.nsd])
 
     # split out to implement contact
     def extractVector(self,b,applyBCs=True):
@@ -1216,7 +1246,7 @@ class ExtractedSpline(object):
         # apply zero bcs to MTAM and MTb
         if(applyBCs):
             as_backend_type(MTb).vec().setValues\
-                (self.zeroDofs,numpy.zeros(self.zeroDofs.getLocalSize()))
+                (self.zero_dofs, numpy.zeros(self.zero_dofs.getLocalSize()))
             as_backend_type(MTb).vec().assemblyBegin()
             as_backend_type(MTb).vec().assemblyEnd()
 
@@ -1260,7 +1290,7 @@ class ExtractedSpline(object):
         # apply zero bcs to MTAM and MTb
         # (default behavior is to set diag=1, as desired)
         if(applyBCs):
-            as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs,diag)
+            as_backend_type(MTAM).mat().zeroRowsColumns(self.zero_dofs, diag)
         as_backend_type(MTAM).mat().assemblyBegin()
         as_backend_type(MTAM).mat().assemblyEnd()
 
@@ -1477,10 +1507,10 @@ class ExtractedSpline(object):
             self.solveLinearVariationalProblem(lhsForm==rhsForm,
                                                retval,applyBCs)
         else:
-            if(self.nFields==1):
+            if(self.n_fields==1):
                 oneConstant = Constant(1.0)
             else:
-                oneConstant = Constant(self.nFields*(1.0,))
+                oneConstant = Constant(self.n_fields * (1.0,))
             lhsForm = inner(oneConstant,v)*self.dx
             lhsVecFE = assemble(lhsForm)
             lhsVec = self.extractVector(lhsVecFE,applyBCs=False)
@@ -1543,10 +1573,10 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
 
         #MPETSc.create()
         
-        MPETSc.createAIJ([[nLocalNodes,None],[None,self.getNcp(-1)]],
+        MPETSc.createAIJ([[nLocalNodes,None], [None, self.get_ncp(-1)]],
                          comm=self.comm)
-        MPETSc.setPreallocationNNZ([self.getPrealloc(True),
-                                    self.getPrealloc(True)])
+        MPETSc.setPreallocationNNZ([self.get_prealloc(True),
+                                    self.get_prealloc(True)])
 
         # just slow down quietly if preallocation is insufficient
         MPETSc.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False)
@@ -1588,7 +1618,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
 
         totalDofs = 0
         for i in range(0, self.get_num_fields()):
-            totalDofs += self.getNcp(i)
+            totalDofs += self.get_ncp(i)
         
         MPETSc = PETSc.Mat(self.comm)
         #MPETSc.create(PETSc.COMM_WORLD)
@@ -1597,8 +1627,8 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         MPETSc.createAIJ([[nLocalNodes,None],[None,totalDofs]],comm=self.comm)
         #MPETSc.setType('aij') # sparse
         # TODO: maybe change preallocation stuff
-        MPETSc.setPreallocationNNZ([self.getPrealloc(False),
-                                    self.getPrealloc(False)])
+        MPETSc.setPreallocationNNZ([self.get_prealloc(False),
+                                    self.get_prealloc(False)])
         #MPETSc.setPreallocationNNZ(0)
         # just slow down quietly if preallocation is insufficient
         MPETSc.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False)
@@ -1633,7 +1663,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
                         MPETSc[matRow,nodesAndEvals[i][0]+offset]\
                             = nodesAndEvals[i][1]
                 
-            offset += self.getNcp(field)
+            offset += self.get_ncp(field)
             
         MPETSc.assemblyBegin()
         MPETSc.assemblyEnd()
@@ -1658,12 +1688,12 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
 
         totalDofs = 0
         for i in range(0, self.get_num_fields()):
-            totalDofs += self.getNcp(i)
+            totalDofs += self.get_ncp(i)
         
         MPETSc = PETSc.Mat(self.comm)
         MPETSc.createAIJ([[nLocalNodes,None],[None,totalDofs]],comm=self.comm)
-        MPETSc.setPreallocationNNZ([self.getPrealloc(False),
-                                    self.getPrealloc(False)])
+        MPETSc.setPreallocationNNZ([self.get_prealloc(False),
+                                    self.get_prealloc(False)])
         MPETSc.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR, False)
         MPETSc.setUp()
 
@@ -1689,7 +1719,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
                     MPETSc[matRow,nodesAndEvals[i][0]+offset]\
                         = mpirank+1 # need to avoid losing zeros...
                    
-            offset += self.getNcp(field)
+            offset += self.get_ncp(field)
 
         MPETSc.assemblyBegin()
         MPETSc.assemblyEnd()
@@ -1703,9 +1733,9 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
             # isolate nonzero entries
             rowValues = numpy.extract(rowValues>0,rowValues)
             iLocal = i - Istart
-            modeValues = mode(rowValues)[0]
+            modeValues = scipy.stats.mode(rowValues)[0]
             if(len(modeValues) > 0):
-                partitionInts[iLocal] = int(mode(rowValues).mode[0]-0.5)
+                partitionInts[iLocal] = int(scipy.stats.mode(rowValues).mode[0]-0.5)
             else:
                 partitionInts[iLocal] = 0 # necessary?
         partitionIS = PETSc.IS(self.comm)
@@ -1733,18 +1763,16 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         
 # abstract class representing a scalar basis of functions on a manifold for
 # which we assume that each point has unique coordinates.  
-class AbstractScalarBasis(object):
+class AbstractScalarBasis(abc.ABC):
 
     """
     Abstraction defining the behavior of a collection of scalar basis 
     functions, defined on a manifold for which each point has unique 
     coordinates.
     """
-    
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def getNodesAndEvals(self,xi):
+    def getNodesAndEvals(self, xi):
         """
         Given a parametric point ``xi``, return a list of the form
         
@@ -1755,26 +1783,32 @@ class AbstractScalarBasis(object):
         pass
 
     @abc.abstractmethod
-    def getNcp(self):
+    def get_ncp(self) -> int:
         """
         Returns the total number of basis functions.
         """
         pass
 
     @abc.abstractmethod
-    def generateMesh(self,comm=worldcomm):
+    def generate_mesh(self, comm=MPI.comm_world) -> dolfin.Mesh:
         """
-        Generates and returns an FE mesh sufficient for extracting this spline
-        basis.  The argument ``comm`` indicates what MPI communicator to 
-        partition the mesh across, defaulting to ``MPI_COMM_WORLD``.
+        Parameters
+        ----------
+        comm: MPI communicator used in finite element mesh creation.
+
+        Returns
+        -------
+        Finite element mesh sufficient for extracting this spline basis
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getDegree(self):
+    def get_degree(self) -> int:
         """
-        Returns a polynomial degree for FEs that is sufficient for extracting 
-        this spline basis.
+        Returns
+        -------
+        The polynomial degree for FEs that is sufficient for extracting this
+        spline basis.
         """
         pass
 
@@ -1786,16 +1820,17 @@ class AbstractScalarBasis(object):
     #@abc.abstractmethod
     # assume DG unless this is overridden by a subclass (as DG will work even
     # if CG is okay (once they fix DG for quads/hexes at least...))
-    def needsDG(self):
+    def needs_dg(self) -> bool:
         """
-        Returns a Boolean indicating whether or not DG elements are needed
-        to represent this spline space (i.e., whether or not the basis is
-        discontinuous).
+        Returns
+        -------
+        Indicate whether or not DG elements are needed to represent this
+        spline space (i.e., whether or not the basis is discontinuous).
         """
         return True
 
     @abc.abstractmethod
-    def useRectangularElements(self):
+    def use_rectangular_elements(self):
         """
         Returns a Boolean indicating whether or not rectangular (i.e., quad
         or hex) elements should be used for extraction of this basis.
@@ -1810,7 +1845,7 @@ class AbstractScalarBasis(object):
     # the maximum number of IGA basis functions whose supports might contain
     # a finite element node (i.e, the maximum number of nonzero
     # entries in a row of M corrsponding to that FE basis function.)
-    def getPrealloc(self):
+    def get_prealloc(self):
         """
         Returns some upper bound on the number of nonzero entries per row
         of the extraction matrix for this spline space.  If this can be
@@ -1822,13 +1857,11 @@ class AbstractScalarBasis(object):
         return DEFAULT_PREALLOC
     
 # interface needed for a control mesh with a coordinate chart
-class AbstractControlMesh(object):
+class AbstractControlMesh(abc.ABC):
     """
     Abstraction representing the behavior of a control mesh, i.e., a mapping
     from parametric to physical space.
     """
-    
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def get_homogeneous_coordinate(self, node, direction):
@@ -1839,77 +1872,85 @@ class AbstractControlMesh(object):
         pass
 
     @abc.abstractmethod
-    def get_scalar_spline(self):
+    def get_scalar_spline(self) -> AbstractScalarBasis:
         """
-        Returns the instance of ``AbstractScalarBasis`` that represents
-        each homogeneous component of the control mapping.
+        Parameters
+        ----------
+        field: Field index.
+
+        Returns
+        -------
+        The corresponding ``AbstractScalarBasis`` that represents the
+        homogeneous component of the control mapping. If field is -1 the
+        basis for the scalar space of the control mesh is returned.
         """
+        #TODO separate this control mesh/scalar basis functionality
         pass
 
     @abc.abstractmethod
-    def get_nsd(self):
+    def get_nsd(self) -> int:
         """
-        Returns the dimension of physical space.
+        Returns
+        -------
+        Dimension of physical space.
         """
         pass
 
 
 class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
-
     """
-    Interface for a general multi-field spline.  The reason this is
-    a special case of ``AbstractCoordinateChartSpline`` 
-    (instead of being redundant in light of AbstractExtractionGenerator) 
-    is that it uses a collection of ``AbstractScalarBasis`` objects, whose 
-    ``getNodesAndEvals()`` methods require parametric coordinates 
-    to correspond to unique points.
+    Interface for a general multi-field spline.  The reason this is a special
+    case of ``AbstractCoordinateChartSpline`` (instead of being redundant in
+    light of AbstractExtractionGenerator) is that it uses a collection of
+    ``AbstractScalarBasis`` objects, whose ``getNodesAndEvals()`` methods
+    require parametric coordinates to correspond to unique points.
     """
 
     @abc.abstractmethod
-    def get_control_mesh(self):
+    def get_control_mesh(self) -> AbstractControlMesh:
         """
-        Returns some object implementing ``AbstractControlMesh``, that
-        represents this spline's control mesh.
+        Returns
+        -------
+        This spline's ``AbstractControlMesh`` implementation.
         """
         pass
 
     @abc.abstractmethod
-    def get_field_spline(self, field):
+    def get_field_spline(self, field: int) -> AbstractScalarBasis:
         """
-        Returns the ``field``-th unknown scalar field's 
-        ``AbstractScalarBasis``.
+        Parameters
+        ----------
+        field: Field index
+
+        Returns
+        -------
+        The field index's ``AbstractScalarBasis``.
         """
         pass
 
-    # overrides method inherited from AbstractExtractionGenerator, using
-    # getPrealloc() methods from its AbstractScalarBasis members.
-    def getPrealloc(self,control):
-        if(control):
-            retval = self.get_scalar_spline(-1).getPrealloc()
+    def get_prealloc(self, control):
+        if control:
+            retval = self.get_scalar_spline(-1).get_prealloc()
         else:
-            maxPrealloc = 0
+            max_prealloc = 0
             for i in range(0, self.get_num_fields()):
-                prealloc = self.get_scalar_spline(i).getPrealloc()
-                if(prealloc > maxPrealloc):
-                    maxPrealloc = prealloc
-            retval = maxPrealloc
-        #print control, retval
+                prealloc = self.get_scalar_spline(i).get_prealloc()
+                if prealloc > max_prealloc:
+                    max_prealloc = prealloc
+            retval = max_prealloc
         return retval
     
     def get_scalar_spline(self, field: int):
-        # """
-        # Returns the ``field``-th unknown scalar field's \
-        # ``AbstractScalarBasis``, or, if ``field==-1``, the
-        # basis for the scalar space of the control mesh.
-        # """
-        if field==-1:
+        if field == -1:
             return self.get_control_mesh().get_scalar_spline()
         else:
             return self.get_field_spline(field)
 
-    def get_nsd(self):
+    def get_nsd(self) -> int:
         """
-        Returns the dimension of physical space.
+        Returns
+        -------
+        Dimension of physical space.
         """
         return self.get_control_mesh().get_nsd()
 
@@ -1917,43 +1958,58 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
         """
         Invokes the synonymous method of its control mesh.
         """
-        return self.get_control_mesh()\
-            .get_homogeneous_coordinate(node,direction)
+        return self.get_control_mesh() \
+            .get_homogeneous_coordinate(node, direction)
 
-    def getNodesAndEvals(self,x,field):
+    def getNodesAndEvals(self, x, field):
         return self.get_scalar_spline(field).getNodesAndEvals(x)
 
-    def generateMesh(self):
-        return self.get_scalar_spline(-1).generateMesh(comm=self.comm)
+    def generate_mesh(self):
+        return self.get_scalar_spline(-1).generate_mesh(comm=self.comm)
 
-    def getDegree(self,field):
+    def get_degree(self, field: int) -> int:
         """
-        Returns the polynomial degree needed to extract the ``field``-th
-        unknown scalar field.
-        """
-        return self.get_scalar_spline(field).getDegree()
+        Parameters
+        ----------
+        field: Field index
 
-    def getNcp(self,field):
+        Returns
+        -------
+        Polynomial degree needed to extract the unknown scalar field
         """
-        Returns the number of degrees of freedom for a given ``field``.
-        """
-        return self.get_scalar_spline(field).getNcp()
+        return self.get_scalar_spline(field).get_degree()
 
-    def useDG(self):
+    def get_ncp(self, field: int):
+        """
+        Parameters
+        ----------
+        field: Field index
+
+        Returns
+        -------
+        Number of degrees of freedom for the given ``field``.
+        """
+        return self.get_scalar_spline(field).get_ncp()
+
+    def use_dg(self):
         for i in range(-1, self.get_num_fields()):
-            if(self.get_scalar_spline(i).needsDG()):
+            if self.get_scalar_spline(i).needs_dg():
                 return True
         return False
 
-# common case of all control functions and fields belonging to the
-# same scalar space.  Note: fields are all stored in homogeneous format, i.e.,
-# they need to be divided through by weight to get an iso-parametric
-# formulation.
+
 class EqualOrderSpline(AbstractMultiFieldSpline):
     """
     A concrete subclass of ``AbstractMultiFieldSpline`` to cover the common
     case of multi-field splines in which all unknown scalar fields are 
     discretized using the same ``AbstractScalarBasis``.
+
+    Note
+    ----
+    This is the common case of all control functions and fields belonging to the
+    same scalar space. Fields are all stored in homogeneous format, i.e.,
+    they need to be divided through by weight to get an iso-parametric
+    formulation.
     """
 
     def __init__(self,
@@ -1976,9 +2032,6 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
         self.control_mesh = control_mesh
         super().__init__(comm)
 
-    def customSetup(self,args):
-        pass
-
     def get_num_fields(self):
         return self.num_fields
 
@@ -1988,8 +2041,8 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
     def get_field_spline(self, field):
         return self.get_scalar_spline(-1)
 
-    def add_zero_dofs_by_location(
-            self, subdomain: dolfin.SubDomain, field: int):
+    def add_zero_dofs_by_location(self, subdomain: dolfin.SubDomain,
+                                  field: int):
         """
         In the equal-order case there is a one-to-one correspondence between
         the DoFs of the scalar fields and the control points of the
@@ -2004,7 +2057,6 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
         subdomain: Geometric DOLFIN subdomain
         field: Field index
         """
-        
         # this is prior to the permutation
         Istart, Iend = self.M_control.mat().getOwnershipRangeColumn()
         nsd = self.get_nsd()
@@ -2020,30 +2072,33 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
             # on_boundary argument is handled
             isInside = subdomain.inside(p[0:nsd],False) \
                        or subdomain.inside(p[0:nsd],True)
-            if(isInside):
-                self.zeroDofs += [self.globalDof(field,I),]
-    
-# a concrete case with a list of distinct scalar splines
-class FieldListSpline(AbstractMultiFieldSpline):
+            if isInside:
+                self.zero_dofs += [self.globalDof(field, I), ]
 
+
+class FieldListSpline(AbstractMultiFieldSpline):
     """
     A concrete case of a multi-field spline that is constructed from a given
-    list of ``AbstractScalarBasis`` objects.  
+    list of distinct ``AbstractScalarBasis`` objects.
     """
-    
-    # args: controlMesh, fields
-    def customSetup(self,args):
+
+    def __init__(self, control_mesh: AbstractControlMesh,
+                 fields: typing.List[AbstractScalarBasis]):
         """
-        ``args = (controlMesh,fields)``, where ``controlMesh`` is an
-        ``AbstractControlMesh`` providing the mapping from parametric to
-        physical space and ``fields`` is a list of ``AbstractScalarBasis``
-        objects for the unknown scalar fields.
+        Parameters
+        ----------
+        control_mesh: Mapping from parametric to physical space
+        fields: List of scalar bases for the unknown scalar fields
         """
-        self.controlMesh = args[0]
-        self.fields = args[1]
+        self.control_mesh = control_mesh
+        self.fields = fields
+        super().__init__(MPI.comm_world)
+
     def get_num_fields(self):
         return len(self.fields)
+
     def get_control_mesh(self):
-        return self.controlMesh
+        return self.control_mesh
+
     def get_field_spline(self, field):
         return self.fields[field]

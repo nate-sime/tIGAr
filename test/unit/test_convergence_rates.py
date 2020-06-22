@@ -18,8 +18,8 @@ def test_poisson():
         scalarSpline = splineGenerator.get_scalar_spline(field)
         for parametricDirection in [0, 1]:
             for side in [0, 1]:
-                sideDofs = scalarSpline.getSideDofs(parametricDirection, side)
-                splineGenerator.addZeroDofs(field, sideDofs)
+                sideDofs = scalarSpline.get_side_dofs(parametricDirection, side)
+                splineGenerator.add_zero_dofs(field, sideDofs)
 
         QUAD_DEG = 2 * max(p, q)
         spline = ExtractedSpline(splineGenerator, QUAD_DEG)

@@ -77,14 +77,14 @@ class BdryDomain(SubDomain):
     def inside(self,x,on_boundary):
         return x[0] < -6.0
 for i in range(0,d):
-    splineGenerator.addZeroDofsByLocation(BdryDomain(),i)
+    splineGenerator.add_zero_dofs_by_location(BdryDomain(), i)
 
 # Fix only the y- and z- components of displacement for the right ends.
 class BdryDomain(SubDomain):
     def inside(self,x,on_boundary):
         return x[0] > 10.0
 for i in range(1,d):
-    splineGenerator.addZeroDofsByLocation(BdryDomain(),i)
+    splineGenerator.add_zero_dofs_by_location(BdryDomain(), i)
     
 # Write the extraction data.
 DIR = "./extraction"
@@ -111,12 +111,12 @@ def nodeToDof(node,direction):
 # Potentially-fragile assumption: that there is a correspondence in DoF order
 # between the scalar space used for each component of the control mapping and
 # the mixed space used for the displacement.  
-nNodes = spline.cpFuncs[0].vector().get_local().size
+nNodes = spline.cp_funcs[0].vector().get_local().size
 nodeX = zeros((nNodes,d))
 for i in range(0,nNodes):
-    wi = spline.cpFuncs[d].vector().get_local()[i]
+    wi = spline.cp_funcs[d].vector().get_local()[i]
     for j in range(0,d):
-        Xj_hom = spline.cpFuncs[j].vector().get_local()[i]
+        Xj_hom = spline.cp_funcs[j].vector().get_local()[i]
         nodeX[i,j] = Xj_hom/wi
 
 # The contact potential is NOT defined in UFL; contact forces will be computed
@@ -186,7 +186,7 @@ def assembleContact(dispFunc):
     disp = dispFlat.reshape((-1,d))
     # Divide nodal displacements through by FE nodal weights.
     for i in range(0,nNodes):
-        wi = spline.cpFuncs[d].vector().get_local()[i]
+        wi = spline.cp_funcs[d].vector().get_local()[i]
         for j in range(0,d):
             disp[i,j] /= wi
     # Compute deformed positions of nodes in physical space.
@@ -228,8 +228,8 @@ def assembleContact(dispFunc):
             f12 = C*phiPrime(r12)*r12hat
 
             # Nodal FE spline (not quadrature) weights:
-            w1 = spline.cpFuncs[d].vector().get_local()[node1]
-            w2 = spline.cpFuncs[d].vector().get_local()[node2]
+            w1 = spline.cp_funcs[d].vector().get_local()[node1]
+            w2 = spline.cp_funcs[d].vector().get_local()[node2]
 
             # Add equal-and-opposite forces to the RHS vector.
             for direction in range(0,d):
@@ -435,14 +435,14 @@ for timeStep in range(0,N_TIME_STEPS):
         d2File << d2
         # (Note that the components of spline.F are rational, and cannot be
         # directly outputted to ParaView files.)
-        spline.cpFuncs[0].rename("F0","F0")
-        spline.cpFuncs[1].rename("F1","F1")
-        spline.cpFuncs[2].rename("F2","F2")
-        spline.cpFuncs[3].rename("F3","F3")
-        F0File << spline.cpFuncs[0]
-        F1File << spline.cpFuncs[1]
-        F2File << spline.cpFuncs[2]
-        F3File << spline.cpFuncs[3]
+        spline.cp_funcs[0].rename("F0", "F0")
+        spline.cp_funcs[1].rename("F1", "F1")
+        spline.cp_funcs[2].rename("F2", "F2")
+        spline.cp_funcs[3].rename("F3", "F3")
+        F0File << spline.cp_funcs[0]
+        F1File << spline.cp_funcs[1]
+        F2File << spline.cp_funcs[2]
+        F3File << spline.cp_funcs[3]
     
 
     # Because of the non-standard assembly process, in which contributions

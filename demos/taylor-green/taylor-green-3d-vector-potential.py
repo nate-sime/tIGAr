@@ -50,9 +50,9 @@ NEL = 16
 degs = [1,1,1]
 
 # Knot vectors for defining the control mesh.
-kvecs = [uniformKnots(degs[0],0.0,math.pi,NEL,False),\
-         uniformKnots(degs[1],0.0,math.pi,NEL,False),\
-         uniformKnots(degs[2],0.0,math.pi,NEL,False)]
+kvecs = [uniform_knots(degs[0], 0.0, math.pi, NEL, False), \
+         uniform_knots(degs[1], 0.0, math.pi, NEL, False), \
+         uniform_knots(degs[2], 0.0, math.pi, NEL, False)]
 
 # Define a trivial mapping from parametric to physical space, via explicit
 # B-spline.
@@ -64,12 +64,12 @@ splineGenerator = BSplineCompat(controlMesh,"N",degs)
 # Apply strong BCs to velocity in parametric normal directions by constraining
 # the vector potential in tangential directions. 
 for field in range(0,3):
-    scalarSpline = splineGenerator.getFieldSpline(field)
+    scalarSpline = splineGenerator.get_field_spline(field)
     for direction in range(0,3):
         for side in range(0,2):
             if(field != direction):
-                sideDofs = scalarSpline.getSideDofs(direction,side)
-                splineGenerator.addZeroDofs(field,sideDofs)
+                sideDofs = scalarSpline.get_side_dofs(direction, side)
+                splineGenerator.add_zero_dofs(field, sideDofs)
 
 
 # Write the extraction data to the filesystem.

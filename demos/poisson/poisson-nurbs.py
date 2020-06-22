@@ -8,7 +8,7 @@ from tIGAr import *
 from tIGAr.NURBS import *
 from igakit.nurbs import NURBS as NURBS_ik
 from igakit.io import PetIGA
-from numpy import array
+import numpy
 import math
 
 # Number of levels of refinement with which to run the Poisson problem.
@@ -17,7 +17,7 @@ import math
 N_LEVELS = 3
 
 # Array to store error at different refinement levels:
-L2_errors = zeros(N_LEVELS)
+L2_errors = numpy.zeros(N_LEVELS)
 
 for level in range(0,N_LEVELS):
 
@@ -35,9 +35,9 @@ for level in range(0,N_LEVELS):
 
     # Array of control points, for a bi-unit square with the interior
     # parameterization distorted.
-    cpArray = array([[[-1.0,-1.0],[0.0,-1.0],[1.0,-1.0]],
-                      [[-1.0,0.0],[0.7,0.3],[1.0,0.0]],
-                      [[-1.0,1.0],[0.0,1.0],[1.0,1.0]]])
+    cpArray = numpy.array([[[-1.0,-1.0],[0.0,-1.0],[1.0,-1.0]],
+                           [[-1.0,0.0],[0.7,0.3],[1.0,0.0]],
+                           [[-1.0,1.0],[0.0,1.0],[1.0,1.0]]])
 
     # NOTE: Polynomial degree is determined based on the number of knots and
     # control points.  In this case, the NURBS is quadratic.
@@ -54,7 +54,7 @@ for level in range(0,N_LEVELS):
     knotList = []
     for i in range(0,numNewKnots):
         knotList += [float(i+1)*h-1.0,]
-    newKnots = array(knotList)
+    newKnots = numpy.array(knotList)
     ikNURBS.refine(0,newKnots)
     ikNURBS.refine(1,newKnots)
 
@@ -83,11 +83,11 @@ for level in range(0,N_LEVELS):
     # ends of the domain, in both directions, for two layers of control points.
     # This strongly enforces BOTH $u=0$ and $\nabla u\cdot\mathbf{n}=0$. 
     field = 0
-    scalarSpline = splineGenerator.getScalarSpline(field)
+    scalarSpline = splineGenerator.get_scalar_spline(field)
     for parametricDirection in [0,1]:
         for side in [0,1]:
-            sideDofs = scalarSpline.getSideDofs(parametricDirection,side)
-            splineGenerator.addZeroDofs(field,sideDofs)
+            sideDofs = scalarSpline.get_side_dofs(parametricDirection, side)
+            splineGenerator.add_zero_dofs(field, sideDofs)
 
     # Write extraction data to the filesystem.
     DIR = "./extraction"
@@ -149,8 +149,8 @@ for level in range(0,N_LEVELS):
     nsd = 3
     for i in range(0,nsd+1):
         name = "F"+str(i)
-        spline.cpFuncs[i].rename(name,name)
-        File("results/"+name+"-file.pvd") << spline.cpFuncs[i]
+        spline.cp_funcs[i].rename(name, name)
+        File("results/"+name+"-file.pvd") << spline.cp_funcs[i]
 
     # Useful notes for plotting:
     #

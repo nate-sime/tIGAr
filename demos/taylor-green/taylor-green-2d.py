@@ -81,10 +81,10 @@ splineGenerator = BSplineCompat(controlMesh,"RT",degs)
 # the physical normal flow is zero (since the parametric tangential direction
 # is always physically tangential as well).
 for field in range(0,2):
-    scalarSpline = splineGenerator.getFieldSpline(field)
+    scalarSpline = splineGenerator.get_field_spline(field)
     for side in range(0,2):
-        sideDofs = scalarSpline.getSideDofs(field,side)
-        splineGenerator.addZeroDofs(field,sideDofs)
+        sideDofs = scalarSpline.get_side_dofs(field, side)
+        splineGenerator.add_zero_dofs(field, sideDofs)
 
 # Write extraction data to filesystem.
 DIR = "./extraction"
@@ -204,14 +204,14 @@ for i in range(0,N_STEPS):
     u1File << u1
 
     # Output the control mesh.
-    spline.cpFuncs[0].rename("F0","F0")
-    spline.cpFuncs[1].rename("F1","F1")
-    spline.cpFuncs[2].rename("F2","F2")
-    spline.cpFuncs[3].rename("F3","F3")
-    F0File << spline.cpFuncs[0]
-    F1File << spline.cpFuncs[1]
-    F2File << spline.cpFuncs[2]
-    F3File << spline.cpFuncs[3]
+    spline.cp_funcs[0].rename("F0", "F0")
+    spline.cp_funcs[1].rename("F1", "F1")
+    spline.cp_funcs[2].rename("F2", "F2")
+    spline.cp_funcs[3].rename("F3", "F3")
+    F0File << spline.cp_funcs[0]
+    F1File << spline.cp_funcs[1]
+    F2File << spline.cp_funcs[2]
+    F3File << spline.cp_funcs[3]
 
     # Advance to next time step.
     timeInt.advance()

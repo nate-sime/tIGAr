@@ -26,16 +26,16 @@ Nel = 100
 L = 1.0
 
 # Create a univariate B-spline.
-splineMesh = ExplicitBSplineControlMesh([p,],[uniformKnots(p,0.0,L,Nel),])
+splineMesh = ExplicitBSplineControlMesh([p,], [uniform_knots(p, 0.0, L, Nel), ])
 splineGenerator = EqualOrderSpline(1,splineMesh)
 
 # Apply Dirichlet BCs to the first two nodes, for a clamped BC.
 field = 0
 parametricDirection = 0
 side = 0
-scalarSpline = splineGenerator.getScalarSpline(field)
-sideDofs = scalarSpline.getSideDofs(parametricDirection,side,nLayers=2)
-splineGenerator.addZeroDofs(field,sideDofs)
+scalarSpline = splineGenerator.get_scalar_spline(field)
+sideDofs = scalarSpline.get_side_dofs(parametricDirection, side, n_layers=2)
+splineGenerator.add_zero_dofs(field, sideDofs)
 
 
 ####### Analysis #######
