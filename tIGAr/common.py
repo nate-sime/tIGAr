@@ -7,6 +7,7 @@ importing this module, a number of setup steps are carried out
 (e.g., initializing MPI).
 """
 
+import dolfin
 from dolfin import *
 import petsc4py, sys
 petsc4py.init(sys.argv)
@@ -15,14 +16,14 @@ from petsc4py import PETSc
 import math
 import numpy
 import abc
-from numpy import array
-from numpy import extract
+# from numpy import array
+# from numpy import extract
 from scipy.stats import mode
-from numpy import argsort
-from numpy import zeros
-from numpy import full
-from numpy import transpose as npTranspose
-from numpy import arange
+# from numpy import argsort
+# from numpy import zeros
+# from numpy import full
+# from numpy import transpose as npTranspose
+# from numpy import arange
 
 import ufl.equation
 
@@ -127,16 +128,14 @@ def generateIdentityPermutation(ownRange,comm=worldcomm):
     retval.createGeneral(iArray,comm=comm)
     return retval
 
-class AbstractExtractionGenerator(object):
+class AbstractExtractionGenerator(abc.ABC):
 
     """
     Abstract class representing the minimal set of functions needed to write
     extraction operators for a spline.
     """
 
-    __metaclass__ = abc.ABCMeta
-
-    def __init__(self,comm,*args):
+    def __init__(self, comm):
 
         """
         Arguments in ``*args`` are passed as a tuple to 
@@ -145,16 +144,88 @@ class AbstractExtractionGenerator(object):
         it will be treated as a communicator for the extraction generator.
         Otherwise, it is treated as if it were the first argument in ``args``.
         """
+        self.comm = comm
+        self.mesh = self.generateMesh()
 
-        if(not(type(comm)==type(selfcomm))):
-            args = (comm,)+args
-            self.comm = worldcomm
+        # note: if self.nsd is set in a customSetup, then the subclass
+        # getNsd() references that, this is still safe
+        self.nsd = self.get_nsd()
+
+        self.VE_control = FiniteElement(self.extractionElement(),
+                                        self.mesh.ufl_cell(),
+                                        self.getDegree(-1))
+        self.V_control = FunctionSpace(self.mesh, self.VE_control)
+
+        if self.get_num_fields() > 1:
+            VE_components = []
+            for i in range(0, self.get_num_fields()):
+                VE_components \
+                    += [FiniteElement(self.extractionElement(),
+                                      self.mesh.ufl_cell(),
+                                      self.getDegree(i)), ]
+
+            self.VE = MixedElement(tuple(VE_components))
         else:
-            self.comm = comm
-        
-            
-        self.customSetup(args)
-        self.genericSetup()
+            self.VE = FiniteElement(self.extractionElement(),
+                                    self.mesh.ufl_cell(),
+                                    self.getDegree(0))
+
+        self.V = FunctionSpace(self.mesh, self.VE)
+
+        self.cpFuncs = []
+        for i in range(0, self.nsd + 1):
+            self.cpFuncs += [Function(self.V_control), ]
+
+        self.M_control = self.generateM_control()
+        self.M = self.generateM()
+
+        # get transpose
+        if (FORM_MT):
+            MT_control = PETScMatrix(self.M_control.mat()
+                                     .transpose(PETSc.Mat(self.comm)))
+
+        # generating CPs, weights in spline space:
+        # (control net never permuted)
+        for i in range(0, self.nsd + 1):
+            if (FORM_MT):
+                MTC = MT_control * (self.cpFuncs[i].vector())
+            else:
+                MTC = multTranspose(self.M_control, self.cpFuncs[i].vector())
+            Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
+            for I in numpy.arange(Istart, Iend):
+                as_backend_type(MTC).vec()[I] \
+                    = self.get_homogeneous_coordinate(I, i)
+            as_backend_type(MTC).vec().assemblyBegin()
+            as_backend_type(MTC).vec().assemblyEnd()
+
+            self.cpFuncs[i].vector().set_local(
+                (self.M_control * MTC).get_local())
+            as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
+
+        # may need to be permuted
+        self.zeroDofs = []  # self.generateZeroDofs()
+
+        # replace M with permuted version
+        # if(mpisize > 1):
+        #
+        #    self.permutation = self.generatePermutation()
+        #    newM = self.M.mat()\
+        #                 .permute\
+        #                 (generateIdentityPermutation\
+        #                  (self.M.mat().getOwnershipRange()),\
+        #                  self.permutation)
+        #    self.M = PETScMatrix(newM)
+        #
+        #    # fix list of zero DOFs
+        #    self.permutationAO = PETSc.AO()
+        #    self.permutationAO\
+        #        .createBasic(self.permutation,\
+        #                     generateIdentityPermutation\
+        #                     (self.M.mat().getOwnershipRangeColumn()))
+        #    zeroDofIS = PETSc.IS()
+        #    zeroDofIS.createGeneral(array(self.zeroDofs,dtype=INDEX_TYPE))
+        #    self.zeroDofs = self.permutationAO.app2petsc\
+        #                    (zeroDofIS).getIndices()
         
     def getComm(self):
         """
@@ -165,47 +236,40 @@ class AbstractExtractionGenerator(object):
     # what type of element (CG or DG) to extract to
     # (override in subclass for non-default behavior)
     def useDG(self):
-
         """
         Returns a Boolean, indicating whether or not to use DG elements 
         in extraction.
         """
-        
         return USE_DG_DEFAULT
     
     def extractionElement(self):
-
         """
         Returns a string indicating what type of FE to use in extraction.
         """
-        
-        if(self.useDG()):
-            return "DG"
-        else:
-            return "Lagrange"
+        return "DG" if self.useDG() else "Lagrange"
         
     @abc.abstractmethod
-    def customSetup(self,args):
+    def customSetup(self, args):
         """
         Customized instructions to execute during initialization.  ``args``
         is a tuple of custom arguments.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getNFields(self):
+    def get_num_fields(self) -> int:
         """
         Returns the number of unknown fields for the spline.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         """
         Return the ``direction``-th homogeneous coordinate of the ``node``-th
         control point of the spline.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def generateMesh(self):
@@ -213,7 +277,7 @@ class AbstractExtractionGenerator(object):
         Generate and return an FE mesh suitable for extracting the 
         subclass's spline space.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def getDegree(self,field):
@@ -222,7 +286,7 @@ class AbstractExtractionGenerator(object):
         representation of a given ``field``, with ``-1`` being the 
         control field.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def getNcp(self,field):
@@ -230,14 +294,14 @@ class AbstractExtractionGenerator(object):
         Return the total number of degrees of freedom of a given ``field``,
         with field ``-1`` being the control mesh field.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getNsd(self):
+    def get_nsd(self):
         """
         Return the number of spatial dimensions of the physical domain.
         """
-        return
+        pass
 
     def globalDof(self,field,localDof):
         """
@@ -309,100 +373,100 @@ class AbstractExtractionGenerator(object):
         """
         Return the extraction matrix for the control field.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def generateM(self):
         """
         Return the extraction matrix for the unknowns.
         """
-        return
+        pass
         
-    def genericSetup(self):
-        """
-        Common setup steps for all subclasses (called in ``self.__init__()``).
-        """
-        
-        self.mesh = self.generateMesh()
-
-        # note: if self.nsd is set in a customSetup, then the subclass
-        # getNsd() references that, this is still safe
-        self.nsd = self.getNsd()
-
-        self.VE_control = FiniteElement(self.extractionElement(),\
-                                        self.mesh.ufl_cell(),\
-                                        self.getDegree(-1))
-        self.V_control = FunctionSpace(self.mesh,self.VE_control)
-
-        if(self.getNFields() > 1):
-            VE_components = []
-            for i in range(0,self.getNFields()):
-                VE_components \
-                    += [FiniteElement(self.extractionElement(),\
-                                      self.mesh.ufl_cell(),\
-                                      self.getDegree(i)),]
-
-            self.VE = MixedElement(tuple(VE_components))
-        else:
-            self.VE = FiniteElement(self.extractionElement(),\
-                                    self.mesh.ufl_cell(),\
-                                    self.getDegree(0))
-            
-        self.V = FunctionSpace(self.mesh,self.VE)
-
-        self.cpFuncs = []
-        for i in range(0,self.nsd+1):
-            self.cpFuncs += [Function(self.V_control),]
-
-        self.M_control = self.generateM_control()
-        self.M = self.generateM()        
-
-        # get transpose
-        if(FORM_MT):
-            MT_control = PETScMatrix(self.M_control.mat()
-                                     .transpose(PETSc.Mat(self.comm)))
-
-        # generating CPs, weights in spline space:
-        # (control net never permuted)
-        for i in range(0,self.nsd+1):
-            if(FORM_MT):
-                MTC = MT_control*(self.cpFuncs[i].vector())
-            else:
-                MTC = multTranspose(self.M_control,self.cpFuncs[i].vector())
-            Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
-            for I in arange(Istart, Iend):
-                as_backend_type(MTC).vec()[I] \
-                    = self.getHomogeneousCoordinate(I,i)
-            as_backend_type(MTC).vec().assemblyBegin()
-            as_backend_type(MTC).vec().assemblyEnd()
-
-            self.cpFuncs[i].vector().set_local((self.M_control*MTC).get_local())
-            as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
-        
-        # may need to be permuted
-        self.zeroDofs = [] #self.generateZeroDofs()
-        
-        # replace M with permuted version
-        #if(mpisize > 1):
+    # def genericSetup(self):
+    #     """
+    #     Common setup steps for all subclasses (called in ``self.__init__()``).
+    #     """
         #
-        #    self.permutation = self.generatePermutation()
-        #    newM = self.M.mat()\
-        #                 .permute\
-        #                 (generateIdentityPermutation\
-        #                  (self.M.mat().getOwnershipRange()),\
-        #                  self.permutation)
-        #    self.M = PETScMatrix(newM)
+        # self.mesh = self.generateMesh()
         #
-        #    # fix list of zero DOFs
-        #    self.permutationAO = PETSc.AO()
-        #    self.permutationAO\
-        #        .createBasic(self.permutation,\
-        #                     generateIdentityPermutation\
-        #                     (self.M.mat().getOwnershipRangeColumn()))
-        #    zeroDofIS = PETSc.IS()
-        #    zeroDofIS.createGeneral(array(self.zeroDofs,dtype=INDEX_TYPE))
-        #    self.zeroDofs = self.permutationAO.app2petsc\
-        #                    (zeroDofIS).getIndices()
+        # # note: if self.nsd is set in a customSetup, then the subclass
+        # # getNsd() references that, this is still safe
+        # self.nsd = self.getNsd()
+        #
+        # self.VE_control = FiniteElement(self.extractionElement(),\
+        #                                 self.mesh.ufl_cell(),\
+        #                                 self.getDegree(-1))
+        # self.V_control = FunctionSpace(self.mesh,self.VE_control)
+        #
+        # if(self.getNFields() > 1):
+        #     VE_components = []
+        #     for i in range(0,self.getNFields()):
+        #         VE_components \
+        #             += [FiniteElement(self.extractionElement(),\
+        #                               self.mesh.ufl_cell(),\
+        #                               self.getDegree(i)),]
+        #
+        #     self.VE = MixedElement(tuple(VE_components))
+        # else:
+        #     self.VE = FiniteElement(self.extractionElement(),\
+        #                             self.mesh.ufl_cell(),\
+        #                             self.getDegree(0))
+        #
+        # self.V = FunctionSpace(self.mesh,self.VE)
+        #
+        # self.cpFuncs = []
+        # for i in range(0,self.nsd+1):
+        #     self.cpFuncs += [Function(self.V_control),]
+        #
+        # self.M_control = self.generateM_control()
+        # self.M = self.generateM()
+        #
+        # # get transpose
+        # if(FORM_MT):
+        #     MT_control = PETScMatrix(self.M_control.mat()
+        #                              .transpose(PETSc.Mat(self.comm)))
+        #
+        # # generating CPs, weights in spline space:
+        # # (control net never permuted)
+        # for i in range(0,self.nsd+1):
+        #     if(FORM_MT):
+        #         MTC = MT_control*(self.cpFuncs[i].vector())
+        #     else:
+        #         MTC = multTranspose(self.M_control,self.cpFuncs[i].vector())
+        #     Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
+        #     for I in arange(Istart, Iend):
+        #         as_backend_type(MTC).vec()[I] \
+        #             = self.getHomogeneousCoordinate(I,i)
+        #     as_backend_type(MTC).vec().assemblyBegin()
+        #     as_backend_type(MTC).vec().assemblyEnd()
+        #
+        #     self.cpFuncs[i].vector().set_local((self.M_control*MTC).get_local())
+        #     as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
+        #
+        # # may need to be permuted
+        # self.zeroDofs = [] #self.generateZeroDofs()
+        #
+        # # replace M with permuted version
+        # #if(mpisize > 1):
+        # #
+        # #    self.permutation = self.generatePermutation()
+        # #    newM = self.M.mat()\
+        # #                 .permute\
+        # #                 (generateIdentityPermutation\
+        # #                  (self.M.mat().getOwnershipRange()),\
+        # #                  self.permutation)
+        # #    self.M = PETScMatrix(newM)
+        # #
+        # #    # fix list of zero DOFs
+        # #    self.permutationAO = PETSc.AO()
+        # #    self.permutationAO\
+        # #        .createBasic(self.permutation,\
+        # #                     generateIdentityPermutation\
+        # #                     (self.M.mat().getOwnershipRangeColumn()))
+        # #    zeroDofIS = PETSc.IS()
+        # #    zeroDofIS.createGeneral(array(self.zeroDofs,dtype=INDEX_TYPE))
+        # #    self.zeroDofs = self.permutationAO.app2petsc\
+        # #                    (zeroDofIS).getIndices()
             
     def applyPermutation(self):
         """
@@ -483,17 +547,17 @@ class AbstractExtractionGenerator(object):
         #f.write(fs)
         #f.close()
         zeroDofIS = PETSc.IS(self.comm)
-        zeroDofIS.createGeneral(array(self.zeroDofs,dtype=INDEX_TYPE))
+        zeroDofIS.createGeneral(numpy.array(self.zeroDofs,dtype=INDEX_TYPE))
         viewer = PETSc.Viewer(self.comm)\
                       .createBinary(dirname+"/"+EXTRACTION_ZERO_DOFS_FILE, 'w')
         viewer(zeroDofIS)
         
         # write info
         if(mpirank == 0):
-            fs = str(self.nsd)+"\n"\
-                 + self.extractionElement()+"\n"\
-                 + str(self.getNFields())+"\n"
-            for i in range(-1,self.getNFields()):
+            fs = str(self.nsd) +"\n" \
+                 + self.extractionElement() +"\n" \
+                 + str(self.get_num_fields()) + "\n"
+            for i in range(-1, self.get_num_fields()):
                 fs += str(self.getDegree(i))+"\n"\
                       + str(self.getNcp(i))+"\n"
             f = open(dirname+"/"+EXTRACTION_INFO_FILE,'w')
@@ -724,9 +788,9 @@ class ExtractedSpline(object):
             generator.applyPermutation()
         
         self.quadDeg = quadDeg
-        self.nsd = generator.getNsd()
+        self.nsd = generator.get_nsd()
         self.elementType = generator.extractionElement()
-        self.nFields = generator.getNFields()
+        self.nFields = generator.get_num_fields()
         self.p_control = generator.getDegree(-1)
         self.p = []
         for i in range(0,self.nFields):
@@ -741,7 +805,7 @@ class ExtractedSpline(object):
         self.M_control = generator.M_control
         self.comm = generator.getComm()
         zeroDofIS = PETSc.IS(self.comm)
-        zeroDofIS.createGeneral(array(generator.zeroDofs,dtype=INDEX_TYPE))
+        zeroDofIS.createGeneral(numpy.array(generator.zeroDofs,dtype=INDEX_TYPE))
         self.zeroDofs = zeroDofIS
             
     def initFromFilesystem(self,dirname,quadDeg,comm,mesh=None):
@@ -1152,7 +1216,7 @@ class ExtractedSpline(object):
         # apply zero bcs to MTAM and MTb
         if(applyBCs):
             as_backend_type(MTb).vec().setValues\
-                (self.zeroDofs,zeros(self.zeroDofs.getLocalSize()))
+                (self.zeroDofs,numpy.zeros(self.zeroDofs.getLocalSize()))
             as_backend_type(MTb).vec().assemblyBegin()
             as_backend_type(MTb).vec().assemblyEnd()
 
@@ -1453,7 +1517,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         spline space (NOT of the rational space) corresponding to a given
         ``field``.
         """
-        return
+        pass
 
     # return a matrix M for extraction
     def generateM_control(self):
@@ -1493,7 +1557,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         # I indexes FEM nodes owned by this process
         #for I in xrange(Istart, Iend):
         dofs = self.V_control.dofmap().dofs()
-        for I in arange(0,len(dofs)):
+        for I in numpy.arange(0,len(dofs)):
             x = x_nodes[dofs[I]-Istart]
             matRow = dofs[I]
             nodesAndEvals = self.getNodesAndEvals(x,-1)
@@ -1523,7 +1587,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         nLocalNodes = Iend - Istart
 
         totalDofs = 0
-        for i in range(0,self.getNFields()):
+        for i in range(0, self.get_num_fields()):
             totalDofs += self.getNcp(i)
         
         MPETSc = PETSc.Mat(self.comm)
@@ -1543,14 +1607,14 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         MPETSc.setUp()
 
         offset = 0
-        for field in range(0,self.getNFields()):
+        for field in range(0, self.get_num_fields()):
             x_nodes = self.V.tabulate_dof_coordinates()\
                             .reshape((-1,self.mesh.geometry().dim()))
-            if(self.getNFields()>1):
+            if(self.get_num_fields()>1):
                 dofs = self.V.sub(field).dofmap().dofs()
             else:
                 dofs = self.V.dofmap().dofs()
-            for I in arange(0,len(dofs)):
+            for I in numpy.arange(0,len(dofs)):
                 x = x_nodes[dofs[I]-Istart]
                 matRow = dofs[I]
                 nodesAndEvals = self.getNodesAndEvals(x,field)
@@ -1593,7 +1657,7 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         nLocalNodes = Iend - Istart
 
         totalDofs = 0
-        for i in range(0,self.getNFields()):
+        for i in range(0, self.get_num_fields()):
             totalDofs += self.getNcp(i)
         
         MPETSc = PETSc.Mat(self.comm)
@@ -1604,14 +1668,14 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         MPETSc.setUp()
 
         offset = 0
-        for field in range(0,self.getNFields()):
+        for field in range(0, self.get_num_fields()):
             x_nodes = self.V.tabulate_dof_coordinates()\
                             .reshape((-1,self.mesh.geometry().dim()))
-            if(self.getNFields()>1):
+            if(self.get_num_fields()>1):
                 dofs = self.V.sub(field).dofmap().dofs()
             else:
                 dofs = self.V.dofmap().dofs()
-            for I in arange(0,len(dofs)):
+            for I in numpy.arange(0,len(dofs)):
                 x = x_nodes[dofs[I]-Istart]
                 matRow = dofs[I]
                 nodesAndEvals = self.getNodesAndEvals(x,field)
@@ -1633,11 +1697,11 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         MT = MPETSc.transpose(PETSc.Mat(self.comm))
         Istart, Iend = MT.getOwnershipRange()
         nLocal = Iend - Istart
-        partitionInts = zeros(nLocal,dtype=INDEX_TYPE)
-        for i in arange(Istart,Iend):
+        partitionInts = numpy.zeros(nLocal,dtype=INDEX_TYPE)
+        for i in numpy.arange(Istart,Iend):
             rowValues = MT.getRow(i)[0]
             # isolate nonzero entries
-            rowValues = extract(rowValues>0,rowValues)
+            rowValues = numpy.extract(rowValues>0,rowValues)
             iLocal = i - Istart
             modeValues = mode(rowValues)[0]
             if(len(modeValues) > 0):
@@ -1688,14 +1752,14 @@ class AbstractScalarBasis(object):
         
         where ``N_i`` is the ``i``-th basis function.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def getNcp(self):
         """
         Returns the total number of basis functions.
         """
-        return
+        pass
 
     @abc.abstractmethod
     def generateMesh(self,comm=worldcomm):
@@ -1712,7 +1776,7 @@ class AbstractScalarBasis(object):
         Returns a polynomial degree for FEs that is sufficient for extracting 
         this spline basis.
         """
-        return
+        pass
 
     # TODO: get rid of the DG stuff in coordinate chart splines, since
     # getNodesAndEvals() is inherently unstable for discontinuous functions
@@ -1736,7 +1800,7 @@ class AbstractScalarBasis(object):
         Returns a Boolean indicating whether or not rectangular (i.e., quad
         or hex) elements should be used for extraction of this basis.
         """
-        return
+        pass
     
     #@abc.abstractmethod
     #def getParametricDimension(self):
@@ -1767,27 +1831,27 @@ class AbstractControlMesh(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         """
         Returns the ``direction``-th homogeneous component of the control 
         point with index ``node``.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getScalarSpline(self):
+    def get_scalar_spline(self):
         """
         Returns the instance of ``AbstractScalarBasis`` that represents
         each homogeneous component of the control mapping.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getNsd(self):
+    def get_nsd(self):
         """
         Returns the dimension of physical space.
         """
-        return
+        pass
 
 
 class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
@@ -1801,85 +1865,83 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
     to correspond to unique points.
     """
 
-    __metaclass__ = abc.ABCMeta
-
     @abc.abstractmethod
-    def getControlMesh(self):
+    def get_control_mesh(self):
         """
         Returns some object implementing ``AbstractControlMesh``, that
         represents this spline's control mesh.
         """
-        return
+        pass
 
     @abc.abstractmethod
-    def getFieldSpline(self,field):
+    def get_field_spline(self, field):
         """
         Returns the ``field``-th unknown scalar field's 
         ``AbstractScalarBasis``.
         """
-        return
+        pass
 
     # overrides method inherited from AbstractExtractionGenerator, using
     # getPrealloc() methods from its AbstractScalarBasis members.
     def getPrealloc(self,control):
         if(control):
-            retval = self.getScalarSpline(-1).getPrealloc()
+            retval = self.get_scalar_spline(-1).getPrealloc()
         else:
             maxPrealloc = 0
-            for i in range(0,self.getNFields()):
-                prealloc = self.getScalarSpline(i).getPrealloc()
+            for i in range(0, self.get_num_fields()):
+                prealloc = self.get_scalar_spline(i).getPrealloc()
                 if(prealloc > maxPrealloc):
                     maxPrealloc = prealloc
             retval = maxPrealloc
         #print control, retval
         return retval
     
-    def getScalarSpline(self,field):
-        """
-        Returns the ``field``-th unknown scalar field's \
-        ``AbstractScalarBasis``, or, if ``field==-1``, the 
-        basis for the scalar space of the control mesh.
-        """
-        if(field==-1):
-            return self.getControlMesh().getScalarSpline()
+    def get_scalar_spline(self, field: int):
+        # """
+        # Returns the ``field``-th unknown scalar field's \
+        # ``AbstractScalarBasis``, or, if ``field==-1``, the
+        # basis for the scalar space of the control mesh.
+        # """
+        if field==-1:
+            return self.get_control_mesh().get_scalar_spline()
         else:
-            return self.getFieldSpline(field)
+            return self.get_field_spline(field)
 
-    def getNsd(self):
+    def get_nsd(self):
         """
         Returns the dimension of physical space.
         """
-        return self.getControlMesh().getNsd()
+        return self.get_control_mesh().get_nsd()
 
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         """
         Invokes the synonymous method of its control mesh.
         """
-        return self.getControlMesh()\
-            .getHomogeneousCoordinate(node,direction)
+        return self.get_control_mesh()\
+            .get_homogeneous_coordinate(node,direction)
 
     def getNodesAndEvals(self,x,field):
-        return self.getScalarSpline(field).getNodesAndEvals(x)
+        return self.get_scalar_spline(field).getNodesAndEvals(x)
 
     def generateMesh(self):
-        return self.getScalarSpline(-1).generateMesh(comm=self.comm)
+        return self.get_scalar_spline(-1).generateMesh(comm=self.comm)
 
     def getDegree(self,field):
         """
         Returns the polynomial degree needed to extract the ``field``-th
         unknown scalar field.
         """
-        return self.getScalarSpline(field).getDegree()
+        return self.get_scalar_spline(field).getDegree()
 
     def getNcp(self,field):
         """
         Returns the number of degrees of freedom for a given ``field``.
         """
-        return self.getScalarSpline(field).getNcp()
+        return self.get_scalar_spline(field).getNcp()
 
     def useDG(self):
-        for i in range(-1,self.getNFields()):
-            if(self.getScalarSpline(i).needsDG()):
+        for i in range(-1, self.get_num_fields()):
+            if(self.get_scalar_spline(i).needsDG()):
                 return True
         return False
 
@@ -1893,48 +1955,66 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
     case of multi-field splines in which all unknown scalar fields are 
     discretized using the same ``AbstractScalarBasis``.
     """
-    
-    # args: numFields, controlMesh
+
+    def __init__(self,
+                 num_fields: int,
+                 control_mesh: AbstractControlMesh,
+                 comm=MPI.comm_world):
+        """
+        Parameters
+        ----------
+        num_fields: number of unknown scalar fields
+        control_mesh: mapping from parametric to physical space
+        comm: MPI communicator
+
+        Note
+        ----
+        The control mesh provides the scalar basis to be used for all unknown
+        scalar fields
+        """
+        self.num_fields = num_fields
+        self.control_mesh = control_mesh
+        super().__init__(comm)
+
     def customSetup(self,args):
-        """
-        ``args = (numFields,controlMesh)``, where ``numFields`` is the 
-        number of unknown scalar fields and ``controlMesh`` is an
-        ``AbstractControlMesh`` providing the mapping from parametric to
-        physical space and, in this case, the scalar basis to be used for
-        all unknown scalar fields.
-        """
-        self.numFields = args[0]
-        self.controlMesh = args[1]
-    def getNFields(self):
-        return self.numFields
-    def getControlMesh(self):
-        return self.controlMesh
-    def getFieldSpline(self,field):
-        return self.getScalarSpline(-1)
+        pass
 
-    def addZeroDofsByLocation(self, subdomain, field):
-        """
-        Because, in the equal-order case, there is a one-to-one
-        correspondence between the DoFs of the scalar fields and the
-        control points of the geometrical mapping, one may, in some cases, 
-        want to assign boundary conditions to the DoFs of the scalar fields
-        based on the locations of their corresponding control points.  
+    def get_num_fields(self):
+        return self.num_fields
 
-        This method assigns homogeneous Dirichlet BCs to DoFs of a given
-        ``field`` if the corresponding control points fall within 
-        ``subdomain``, which is an instance of ``SubDomain``.
+    def get_control_mesh(self):
+        return self.control_mesh
+
+    def get_field_spline(self, field):
+        return self.get_scalar_spline(-1)
+
+    def add_zero_dofs_by_location(
+            self, subdomain: dolfin.SubDomain, field: int):
+        """
+        In the equal-order case there is a one-to-one correspondence between
+        the DoFs of the scalar fields and the control points of the
+        geometrical mapping.
+
+        This method assigns homogeneous Dirichlet BCs to DoFs of the given
+        ``field`` if the corresponding control points fall within the
+        geometric definition of the ``subdomain``.
+
+        Parameters
+        ----------
+        subdomain: Geometric DOLFIN subdomain
+        field: Field index
         """
         
         # this is prior to the permutation
         Istart, Iend = self.M_control.mat().getOwnershipRangeColumn()
-        nsd = self.getNsd()
+        nsd = self.get_nsd()
         # since this checks every single control point, it needs to
         # be scalable
-        for I in arange(Istart, Iend):
-            p = zeros(nsd+1)
-            for j in arange(0,nsd+1):
-                p[j] = self.getHomogeneousCoordinate(I,j)
-            for j in arange(0,nsd):
+        for I in numpy.arange(Istart, Iend):
+            p = numpy.zeros(nsd+1)
+            for j in numpy.arange(0,nsd+1):
+                p[j] = self.get_homogeneous_coordinate(I, j)
+            for j in numpy.arange(0,nsd):
                 p[j] /= p[nsd]
             # make it strictly based on location, regardless of how the
             # on_boundary argument is handled
@@ -1961,9 +2041,9 @@ class FieldListSpline(AbstractMultiFieldSpline):
         """
         self.controlMesh = args[0]
         self.fields = args[1]
-    def getNFields(self):
+    def get_num_fields(self):
         return len(self.fields)
-    def getControlMesh(self):
+    def get_control_mesh(self):
         return self.controlMesh
-    def getFieldSpline(self,field):
+    def get_field_spline(self, field):
         return self.fields[field]

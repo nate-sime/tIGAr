@@ -276,11 +276,11 @@ class RhinoTSplineControlMesh(AbstractControlMesh):
             for j in range(0,self.nsd):
                 self.bnet[i,j] *= self.bnet[i,self.nsd]
 
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         return self.bnet[node,direction]
                 
-    def getScalarSpline(self):
+    def get_scalar_spline(self):
         return self.scalarSpline
 
-    def getNsd(self):
+    def get_nsd(self):
         return self.nsd

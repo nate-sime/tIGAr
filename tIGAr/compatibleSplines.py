@@ -36,7 +36,7 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
     """
     
     nvar = len(degrees)
-    useRect = controlMesh.getScalarSpline().useRectangularElements()
+    useRect = controlMesh.get_scalar_spline().useRectangularElements()
     fields = []
     # i indexes parametric components of the velocity (i.e., scalar fields)
     for i in range(0,nvar):
@@ -52,7 +52,7 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
                 degree += 1
             # ASSUMES that the underlying scalar spline of the control mesh
             # is a BSpline, and re-uses unique knots
-            knots = copy.copy(controlMesh.getScalarSpline().\
+            knots = copy.copy(controlMesh.get_scalar_spline().\
                               splines[j].uniqueKnots)
             # use open knot vector by default or if non-periodic
             if(periodicities==None or (not periodicities[j])):
@@ -91,13 +91,13 @@ class BSplineCompat(AbstractMultiFieldSpline):
         self.fields = generateFieldsCompat(self.controlMesh,self.RTorN,
                                            self.degrees,
                                            periodicities=self.periodicities)
-    def getControlMesh(self):
+    def get_control_mesh(self):
         return self.controlMesh
 
-    def getFieldSpline(self,field):
+    def get_field_spline(self, field):
         return self.fields[field]
 
-    def getNFields(self):
+    def get_num_fields(self):
         return len(self.fields)
 
 def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,

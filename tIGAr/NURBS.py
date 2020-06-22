@@ -60,11 +60,11 @@ class NURBSControlMesh(AbstractControlMesh):
                         self.bnet[ijk2dof(i,j,k,M,N),:]\
                             = ikNURBS.control[i,j,k,:]
             
-    def getScalarSpline(self):
+    def get_scalar_spline(self):
         return self.scalarSpline
 
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         return self.bnet[node,direction]
 
-    def getNsd(self):
+    def get_nsd(self):
         return self.bnet.shape[1]-1

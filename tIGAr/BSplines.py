@@ -6,28 +6,33 @@ that can be used to generate simple sets of extraction data for
 rectangular domains.
 """
 
+import typing
+
 from tIGAr.common import *
 import bisect
 from numpy import searchsorted
 
 
-def uniformKnots(p,start,end,N,periodic=False):
+def uniform_knots(p: int, xi0: float, xi1: float, n_elements: int,
+                  periodic: bool=False) -> typing.List[float]:
     """
-    Helper function to generate a uniform open knot vector of degree ``p`` with
-    ``N`` elements.  If ``periodic``, end knots are not repeated.  
-    Otherwise, they are repeated ``p+1`` times for an open knot vector.
+    Parameters
+    ----------
+    p : spline degree
+    xi0 : knot start
+    xi1 : knot end
+    n_elements : number of elements in the knot vector
+    periodic : if False repeat end knots ``p+1`` times
+
+    Returns
+    -------
+    list
+        the generated knot vector
     """
-    retval = []
-    if(not periodic):
-        for i in range(0,p):
-            retval += [start,]
-    h = (end - start)/float(N)
-    for i in range(0,N+1):
-        retval += [start+float(i)*h,]
-    if(not periodic):
-        for i in range(0,p):
-            retval += [end,]
-    return retval
+    knots = numpy.linspace(xi0, xi1, n_elements+1).tolist()
+    if not periodic:
+        knots = [xi0]*p + knots + [xi1]*p
+    return knots
 
 # need a custom eps for checking knots; dolfin_eps is too small and doesn't
 # reliably catch repeated knots
@@ -168,12 +173,12 @@ class BSpline1(object):
         collection of ``knots``.
         """
         self.p = p
-        self.knots = array(knots)
+        self.knots = numpy.array(knots)
         self.computeNel()
         
         # needed for mesh generation
-        self.uniqueKnots = zeros(self.nel+1)
-        self.multiplicities = zeros(self.nel+1,dtype=INDEX_TYPE)
+        self.uniqueKnots = numpy.zeros(self.nel+1)
+        self.multiplicities = numpy.zeros(self.nel+1,dtype=INDEX_TYPE)
         ct = -1
         lastKnot = None
         for i in range(0,len(self.knots)):
@@ -201,7 +206,7 @@ class BSpline1(object):
         ghostKnots = []
         for i in range(-self.nGhost,len(self.knots)+self.nGhost):
             ghostKnots += [self.getKnot(i),]
-        return array(ghostKnots)
+        return numpy.array(ghostKnots)
         
     def normalizeKnotVector(self):
         """
@@ -318,10 +323,10 @@ class BSpline1(object):
         pl = self.p
         #u_knotl = self.knots
         i = knotSpan+1
-        ndu = zeros((pl+1,pl+1))
-        left = zeros(pl+1)
-        right = zeros(pl+1)
-        ders = zeros(pl+1)
+        ndu = numpy.zeros((pl+1,pl+1))
+        left = numpy.zeros(pl+1)
+        right = numpy.zeros(pl+1)
+        ders = numpy.zeros(pl+1)
 
         basisFuncsInner(self.ghostKnots,self.nGhost,u,
                         pl,i,ndu,left,right,ders)
@@ -364,39 +369,39 @@ def dof2ijk(dof,M,N):
 # Use BSpline1 instances to store info about each dimension.  No point in going
 # higher than 3, since FEniCS only generates meshes up to dimension 3...
 class BSpline(AbstractScalarBasis):
-
     """
     Class implementing the ``AbstractScalarBasis`` interface, to represent
     a uni-, bi-, or tri-variate B-spline.
     """
 
-    def __init__(self,degrees,kvecs,useRect=USE_RECT_ELEM_DEFAULT,
-                 overRefine=0):
+    def __init__(self,
+                 degrees: typing.Sequence[int],
+                 knotvectors: typing.Sequence[typing.Sequence[float]],
+                 use_rect: bool = USE_RECT_ELEM_DEFAULT,
+                 over_refine: int = 0):
         """
-        Create a ``BSpline`` with degrees in each direction given by the
-        sequence ``degrees``, knot vectors given by the list of 
-        sequences ``kvecs``, and an optional Boolean parameter 
-        ``useRect``, indicating
-        whether or not rectangular elements should be used in the 
-        extracted representation.  The optional parameter ``overRefine``
-        indicates how many levels of refinement to apply beyond what is
-        needed to represent the spline functions; choosing a value greater
-        than the default of zero may be useful for 
-        integrating functions with fine-scale features.
-        
-        NOTE: Over-refinement is only supported with simplicial elements.
+        Parameters
+        ----------
+        degrees : B-spline degree in the (u,v,w) directions
+        knotvectors : Knot vectors in (u,v,w) directions
+        use_rect : Employ rectangular FE elements in the control mesh
+        over_refine : indicates how many levels of refinement to apply beyond
+            what is needed to represent the spline functions; choosing a value
+            greater than the default of zero may be useful for integrating
+            functions with fine-scale features.
+
+        Note
+        ----
+        Over-refinement is only supported with simplicial elements.
         """
         self.nvar = len(degrees)
-        if(self.nvar > 3 or self.nvar < 1):
-            print("ERROR: Unsupported parametric dimension.")
-            exit()
-        self.splines = []
-        for i in range(0,self.nvar):
-            self.splines += [BSpline1(degrees[i],kvecs[i]),]
-        self.useRect = useRect
-        self.overRefine = overRefine
-        self.ncp = self.computeNcp()
-        self.nel = self.computeNel()
+        assert 1 < self.nvar < 3, "ERROR: Unsupported parametric dimension."
+        self.splines = \
+            [BSpline1(degrees[i], knotvectors[i]) for i in range(self.nvar)]
+        self.use_rect = use_rect
+        self.over_refine = over_refine
+        self.ncp = self.compute_ncp()
+        self.nel = self.compute_nel()
 
     def normalizeKnotVectors(self):
         """
@@ -423,7 +428,7 @@ class BSpline(AbstractScalarBasis):
         Returns a Boolean indicating whether or not the basis should use
         rectangular elements in its extraction.
         """
-        return self.useRect
+        return self.use_rect
 
     # non-default implementation, optimized for B-splines
     def getPrealloc(self):
@@ -508,7 +513,7 @@ class BSpline(AbstractScalarBasis):
         elif(self.nvar == 2):
             uspline = self.splines[0]
             vspline = self.splines[1]
-            if(self.useRect):
+            if(self.use_rect):
                 cellType = CellType.Type.quadrilateral
             else:
                 cellType = CellType.Type.triangle
@@ -517,7 +522,7 @@ class BSpline(AbstractScalarBasis):
             #                     Point(uspline.nel,vspline.nel),\
             #                     uspline.nel,vspline.nel)
             x = mesh.coordinates()
-            xbar = zeros((len(x),2))
+            xbar = numpy.zeros((len(x),2))
             for i in range(0,len(x)):
                 #uknotIndex = int(round(x[i,0]))
                 #vknotIndex = int(round(x[i,1]))
@@ -531,7 +536,7 @@ class BSpline(AbstractScalarBasis):
             uspline = self.splines[0]
             vspline = self.splines[1]
             wspline = self.splines[2]
-            if(self.useRect):
+            if(self.use_rect):
                 cellType = CellType.Type.hexahedron
             else:
                 cellType = CellType.Type.tetrahedron
@@ -542,7 +547,7 @@ class BSpline(AbstractScalarBasis):
             #               Point(uspline.nel,vspline.nel,wspline.nel),\
             #               uspline.nel,vspline.nel,wspline.nel)
             x = mesh.coordinates()
-            xbar = zeros((len(x),3))
+            xbar = numpy.zeros((len(x),3))
             for i in range(0,len(x)):
                 #uknotIndex = int(round(x[i,0]))
                 #vknotIndex = int(round(x[i,1]))
@@ -556,11 +561,11 @@ class BSpline(AbstractScalarBasis):
             mesh.coordinates()[:] = xbar
 
         # Apply any over-refinement specified:
-        for i in range(0,self.overRefine):
+        for i in range(0, self.over_refine):
             mesh = refine(mesh)
         return mesh
         
-    def computeNcp(self):
+    def compute_ncp(self):
         prod = 1
         for i in range(0,self.nvar):
             prod *= self.splines[i].getNcp()
@@ -573,13 +578,13 @@ class BSpline(AbstractScalarBasis):
         deg = 0
         for i in range(0,self.nvar):
             # for simplex elements; take max for rectangles
-            if(self.useRect):
+            if(self.use_rect):
                 deg = max(deg,self.splines[i].p)
             else:
                 deg += self.splines[i].p
         return deg
 
-    def computeNel(self):
+    def compute_nel(self):
         """
         Returns the number of Bezier elements in the B-spline.
         """
@@ -898,33 +903,47 @@ class MultiBSpline(AbstractScalarBasis):
         for dof in localSideDofs:
             retval += [self.globalDofIndex(dof,patch),]
         return retval
-    
-class ExplicitBSplineControlMesh(AbstractControlMesh):
 
+
+class ExplicitBSplineControlMesh(AbstractControlMesh):
     """
     A control mesh for a B-spline with identical physical and parametric
     domains.
     """
-    
-    def __init__(self,degrees,kvecs,extraDim=0,useRect=USE_RECT_ELEM_DEFAULT,
-                 overRefine=0):
-        """
-        Create an ``ExplicitBSplineControlMesh`` with degrees in each direction
-        given by the sequence ``degrees`` and knot vectors given by the list
-        of sequences ``kvecs``.  The optional Boolean parameter ``useRect``
-        indicates whether or not to use rectangular FEs in the extraction.
-        """
-        self.scalarSpline = BSpline(degrees,kvecs,
-                                    useRect=useRect,
-                                    overRefine=overRefine)
-        # parametric == physical
-        self.nvar = len(degrees)
-        self.nsd = self.nvar + extraDim
 
-    def getScalarSpline(self):
-        return self.scalarSpline
+    def __init__(self,
+                 degrees: typing.Union[int, typing.Sequence[int]],
+                 knotvectors: typing.Union[
+                     typing.Sequence[float],
+                     typing.Sequence[typing.Sequence[float]]],
+                 extra_dim: int = 0,
+                 use_rect: bool=USE_RECT_ELEM_DEFAULT,
+                 over_refine: int = 0):
+        """
+        Parameters
+        ----------
+        degrees : The degrees of the B-spline employed in the (u,v,w) directions
+        knotvectors : Knotvectors in the (u,v,w) directions
+        extra_dim : Additional spatial dimensions, e.g. 2D surface embedded in
+            3D space requires extra_dim = 1
+        use_rect : Use rectangular element type in the FE control mesh
+        over_refine :
+        """
+        if not hasattr(degrees, "__len__"):
+            degrees = [degrees]
+        if not hasattr(knotvectors, "__len__"):
+            knotvectors = [knotvectors]
+
+        self.scalar_spline = BSpline(degrees, knotvectors,
+                                     use_rect=use_rect,
+                                     over_refine=over_refine)
+        self.nvar = len(degrees)
+        self.nsd = self.nvar + extra_dim
+
+    def get_scalar_spline(self):
+        return self.scalar_spline
         
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         # B-spline
         if(direction == self.nsd):
             return 1.0
@@ -936,22 +955,22 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
                 directionalIndex = node
             elif(self.nvar == 2):
                 directionalIndex \
-                    = dof2ij(node,\
-                             self.scalarSpline.splines[0].getNcp())\
+                    = dof2ij(node, \
+                             self.scalar_spline.splines[0].getNcp())\
                              [direction]
             else:
-                M = self.scalarSpline.splines[0].getNcp()
-                N = self.scalarSpline.splines[1].getNcp()
+                M = self.scalar_spline.splines[0].getNcp()
+                N = self.scalar_spline.splines[1].getNcp()
                 directionalIndex = dof2ijk(node,M,N)[direction]
 
             # use Greville points for explicit spline
-            coord = self.scalarSpline.splines[direction].greville\
+            coord = self.scalar_spline.splines[direction].greville\
                     (directionalIndex)
         else:
             coord = 0.0
         return coord
 
-    def getNsd(self):
+    def get_nsd(self):
         return self.nsd
     
 # TODO: think about re-organization, as this is NURBS functionality (but
@@ -1064,9 +1083,9 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
     # Should be able to use the SciPy KD tree to do this in a few lines.
         
     # Required interface for an AbstractControlMesh:
-    def getHomogeneousCoordinate(self,node,direction):
+    def get_homogeneous_coordinate(self, node, direction):
         return self.bnet[node,direction]
-    def getScalarSpline(self):
+    def get_scalar_spline(self):
         return self.scalarSpline
-    def getNsd(self):
+    def get_nsd(self):
         return self.nsd
