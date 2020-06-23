@@ -102,7 +102,8 @@ class BSplineCompat(AbstractMultiFieldSpline):
 
 def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
                          penalty=DEFAULT_RT_PENALTY,
-                         w=None,J=None,reuseLHS=True,applyBCs=True):
+                         w=None,J=None,reuseLHS=True,applyBCs=True,
+                         maxIters: int = 20, relativeTolerance: float = 1e-5):
     """
     Use the iterated penalty method to find a solution to the 
     problem given by ``residualForm``, while constraining the test and
@@ -144,7 +145,7 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
         # div-conserving, but the penalty may not control the physical
         # divergence evenly on nonuniform meshes.
         divOp = lambda u_hat : \
-                spline.div(cartesianPushforwardRT(u_hat,spline.F))
+                spline.div(cartesian_push_forward_RT(u_hat, spline.F))
     
     # augmented problem
     if(w==None):
@@ -161,7 +162,7 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     # TODO: Think more about implementing separate tolerances for
     # momentum and continuity residuals.
     converged = False
-    for i in range(0,spline.maxIters):
+    for i in range(0,maxIters):
         #MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
         MTb = spline.assemble_vector(residualFormAug, apply_bcs=applyBCs)
         if(i==0 or (not reuseLHS)):
@@ -175,12 +176,12 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
             print("Solver iteration: "+str(i)+" , Relative norm: "
                   + str(relativeNorm))
             sys.stdout.flush()
-        if(currentNorm/initialNorm < spline.relativeTolerance):
+        if(currentNorm/initialNorm < relativeTolerance):
             converged = True
             break
         du = Function(spline.V)
         #du.assign(Constant(0.0)*du)
-        spline.solveLinearSystem(MTAM,MTb,du)
+        spline.solve_linear_system(MTAM, MTb, du)
         #as_backend_type(u.vector()).vec().assemble()
         #as_backend_type(du.vector()).vec().assemble()
         u.assign(u-du)
@@ -213,8 +214,8 @@ def divFreeProject(toProject,spline,
     """
     u_hat = Function(spline.V)
     v_hat = TestFunction(spline.V)
-    u = cartesianPushforwardRT(getVelocity(u_hat),spline.F)
-    v = cartesianPushforwardRT(getVelocity(v_hat),spline.F)
+    u = cartesian_push_forward_RT(getVelocity(u_hat), spline.F)
+    v = cartesian_push_forward_RT(getVelocity(v_hat), spline.F)
     res = inner(u-toProject,v)*spline.dx
     if(getOtherFields != None):
         p = getOtherFields(u_hat)
@@ -240,7 +241,7 @@ class ExtractedBSplineRT(ExtractedSpline):
         """
         if(F==None):
             F = self.F
-        return cartesianPushforwardRT(uhat,F)
+        return cartesian_push_forward_RT(uhat, F)
 
     def iteratedDivFreeSolve(self,residualForm,u,v,
                              penalty=DEFAULT_RT_PENALTY,
@@ -275,7 +276,7 @@ class ExtractedBSplineN(ExtractedSpline):
         """
         if(F==None):
             F = self.F
-        return cartesianPushforwardN(Ahat,F)
+        return cartesian_push_forward_N(Ahat, F)
 
     # TODO: Move to free function
     def projectCurl(self,toProject,applyBCs=False):
@@ -292,5 +293,5 @@ class ExtractedBSplineN(ExtractedSpline):
         v = self.curl(self.pushforward(Bhat))
         res = inner(u-toProject,v)*self.dx
         retval = Function(self.V)
-        self.solveLinearVariationalProblem(res,retval,applyBCs)
+        self.solve_linear_variational_problem(res, retval, applyBCs)
         return retval

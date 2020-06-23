@@ -75,9 +75,6 @@ for level, n_ele in enumerate(n_eles):
 
     # spline = ExtractedSpline(DIR,QUAD_DEG)
 
-    if (mpirank == 0):
-        print("Solving...")
-
     # Homogeneous coordinate representation of the trial function u.  Because 
     # weights are 1 in the B-spline case, this can be used directly in the PDE,
     # without dividing through by weight.
@@ -95,7 +92,7 @@ for level, n_ele in enumerate(n_eles):
     a = inner(spline.grad(u), spline.grad(v)) * spline.dx
     L = inner(f, v) * spline.dx
     u = Function(spline.V)
-    spline.solveLinearVariationalProblem(a == L, u)
+    spline.solve_linear_variational_problem(a == L, u)
 
     ####### Postprocessing #######
 

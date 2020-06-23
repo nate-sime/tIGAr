@@ -7,7 +7,7 @@ implementing demos.
 """
 
 from tIGAr.common import *
-from tIGAr.calculusUtils import getQuadRule
+from tIGAr.calculusUtils import get_quadrature_rule
 from ufl import shape, rank
 
 class BackwardEulerIntegrator:
@@ -265,7 +265,7 @@ class LinearDGSpaceTimeIntegrator:
         """
         # Quadrature rule in the parametric coordinates [-1,1] of the
         # time slab:
-        self.quadPts,self.quadWts = getQuadRule(nTimeQuadPts)
+        self.quadPts,self.quadWts = get_quadrature_rule(nTimeQuadPts)
         self.nTimeQuadPts = nTimeQuadPts
         self.DELTA_T = DELTA_T
         # Time at beginning of current slab:

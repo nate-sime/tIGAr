@@ -111,7 +111,7 @@ for level in range(0,N_LEVELS):
     # Set up and solve the biharmonic problem
     res = inner(lap(u),lap(v))*spline.dx - inner(f,v)*spline.dx
     u = Function(spline.V)
-    spline.solveLinearVariationalProblem(res,u)
+    spline.solve_linear_variational_problem(res, u)
 
 
     ####### Postprocessing #######

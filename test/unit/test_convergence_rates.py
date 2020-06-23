@@ -34,7 +34,7 @@ def test_poisson():
         a = inner(spline.grad(u), spline.grad(v)) * spline.dx
         L = inner(f, v) * spline.dx
         u = Function(spline.V)
-        spline.solveLinearVariationalProblem(a == L, u)
+        spline.solve_linear_variational_problem(a == L, u)
 
         L2_errors[level] = assemble(((u - soln) ** 2) * spline.dx)**0.5
 

@@ -110,12 +110,12 @@ soln1 = -cos(x[0])*sin(x[1])*cos(x[2])
 soln = as_vector([soln0,soln1,Constant(0.0)])
 
 # For 3D computations, use an iterative solver.
-spline.linearSolver = PETScKrylovSolver("gmres","jacobi")
+spline.linear_solver = PETScKrylovSolver("gmres", "jacobi")
 
 # In the discretization using an RT-type velocity field, the solver tolerances
 # can lead to nonzero velocity divergence.  In the vector potential
 # discretization, the velocity solution is solenoidal by construction.  
-spline.linearSolver.parameters["relative_tolerance"] = 1e-2
+spline.linear_solver.parameters["relative_tolerance"] = 1e-2
 spline.relativeTolerance = 1e-3
 
 # The unknown parametric vector potential:
@@ -176,7 +176,7 @@ for i in range(0,N_STEPS):
         print("------- Time step "+str(i+1)+" , t = "+str(timeInt.t)+" -------")
 
     # Solve for the vector potential.
-    spline.solveNonlinearVariationalProblem(res,J,A_hat)
+    spline.solve_nonlinear_variational_problem(res, J, A_hat)
 
     # Assemble the dissipation rate, and append it to a file that can be
     # straightforwardly plotted as a function of time using gnuplot.

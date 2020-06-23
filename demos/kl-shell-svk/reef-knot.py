@@ -478,7 +478,7 @@ for timeStep in range(0,N_TIME_STEPS):
         # Solve for the nonlinear increment, and add it to the current
         # solution guess.
         dy_hom = Function(spline.V)
-        spline.solveLinearSystem(MTKM,MTF,dy_hom)
+        spline.solve_linear_system(MTKM, MTF, dy_hom)
         y_hom.assign(y_hom-dy_hom)
 
         if(relNorm < REL_TOL):

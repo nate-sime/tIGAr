@@ -135,7 +135,7 @@ for level in range(0,N_LEVELS):
     # FEniCS Function objects are always in the homogeneous representation; it
     # is a good idea to name variables in such a way as to recall this.
     u_hom = Function(spline.V)
-    spline.solveLinearVariationalProblem(a==L,u_hom)
+    spline.solve_linear_variational_problem(a == L, u_hom)
 
 
     ####### Postprocessing #######

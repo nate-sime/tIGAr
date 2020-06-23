@@ -290,7 +290,7 @@ for i in range(0,50):
 
     # Solve the nonlinear problem for this time step and put the solution
     # (in homogeneous coordinates) in y_hom.
-    spline.solveNonlinearVariationalProblem(res,dRes,y_hom)
+    spline.solve_nonlinear_variational_problem(res, dRes, y_hom)
 
     # Output fields needed for visualization.
     (d0,d1,d2) = y_hom.split()

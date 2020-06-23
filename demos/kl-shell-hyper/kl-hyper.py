@@ -204,7 +204,7 @@ h_th = Constant(0.03)
 
 # Obtain a quadrature rule for numerical through-thickness integration:
 N_QUAD_PTS = 4
-xi2, w = getQuadRuleInterval(N_QUAD_PTS,h_th)
+xi2, w = get_quadrature_rule_interval(N_QUAD_PTS, h_th)
 
 # Define the numerically-integrated energy:
 energySurfaceDensity = 0.0
@@ -253,7 +253,7 @@ for i in range(0,N_STEPS):
         print("------- Step: "+str(i+1)+" , t = "+str(stepper.tval)+" -------")
 
     # Execute nonlinear solve.
-    spline.solveNonlinearVariationalProblem(res,dRes,y_hom)
+    spline.solve_nonlinear_variational_problem(res, dRes, y_hom)
 
     # Advance to next load step.
     stepper.advance()

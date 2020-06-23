@@ -210,22 +210,24 @@ def covariantDerivative(T):
     newLowered = T.lowered+[True,]
     return CurvilinearTensor(retval,g,newLowered)
 
-def curvilinearGrad(T):
+
+def curvilinear_grad(T):
     """
     Returns the gradient of ``CurvilinearTensor`` argument ``T``, i.e., the
     covariant derivative with the last index raised.
     """
     n = rank(T.T)
-    ii = indices(n+2)
+    ii = indices(n + 2)
     g = T.g
     deriv = covariantDerivative(T)
     invg = inv(g)
     # raise last index
-    retval = as_tensor(deriv.T[ii[0:n+1]]*invg[ii[n:n+2]],\
-                       ii[0:n]+(ii[n+1],))
-    return CurvilinearTensor(retval,g,T.lowered+[False,])
+    retval = as_tensor(deriv.T[ii[0:n + 1]] * invg[ii[n:n + 2]],
+                       ii[0:n] + (ii[n + 1],))
+    return CurvilinearTensor(retval, g, T.lowered + [False, ])
 
-def curvilinearDiv(T):
+
+def curvilinear_div(T):
     """
     Returns the divergence of the ``CurvilinearTensor`` argument ``T``, i.e.,
     the covariant derivative, but contracting over the new index and the 
@@ -237,16 +239,17 @@ def curvilinearDiv(T):
     n = rank(T.T)
     ii = indices(n)
     g = T.g
-    j = -1 # last raised index
-    for i in range(0,n):
-        if(not T.lowered[i]):
+    j = -1  # last raised index
+    for i in range(0, n):
+        if not T.lowered[i]:
             j = i
-    if(j == -1):
-        print("ERROR: Divergence operator requires at least one raised index.")
-        exit()
+    if j == 1:
+        raise Exception("Divergence operator requires at least one raised "
+                        "index.")
     deriv = covariantDerivative(T)
-    retval = as_tensor(deriv.T[ii[0:n]+(ii[j],)],ii[0:j]+ii[j+1:n])
-    return CurvilinearTensor(retval,g,T.lowered[0:j]+T.lowered[j+1:n])
+    retval = as_tensor(deriv.T[ii[0:n] + (ii[j],)], ii[0:j] + ii[j + 1:n])
+    return CurvilinearTensor(retval, g, T.lowered[0:j] + T.lowered[j + 1:n])
+
 
 # Cartesian differential operators in deformed configuration
 # N.b. that, when applied to tensor-valued f, f is considered to be
@@ -258,13 +261,14 @@ def cartesian_grad(f, F):
     coordinates, assuming the parametric domain has been mapped to its
     physical configuration by the mapping ``F``.
     """
-    return dot(grad(f),pinvD(F))
-    #n = rank(f)
-    #ii = indices(n+2)
-    #pinvDF = pinvD(F)
-    #return as_tensor(grad(f)[ii[0:n+1]]\
+    return dot(grad(f), pinvD(F))
+    # n = rank(f)
+    # ii = indices(n+2)
+    # pinvDF = pinvD(F)
+    # return as_tensor(grad(f)[ii[0:n+1]]\
     #                 *pinvDF[ii[n],ii[n+1]],\
     #                 ii[0:n]+(ii[n+1],))
+
 
 def cartesian_div(f, F):
     """
@@ -275,6 +279,7 @@ def cartesian_div(f, F):
     ii = indices(n)
     return as_tensor(cartesian_grad(f, F)[ii + (ii[n - 1],)], ii[0:n - 1])
 
+
 def cartesian_curl(f, F):
     """
     The curl operator corresponding to ``cartesianGrad(f,F)``.  For ``f`` of 
@@ -283,28 +288,26 @@ def cartesian_curl(f, F):
     """
     n = rank(f)
     gradf = cartesian_grad(f, F)
-    if(n==1):
+    if n == 1:
         m = shape(f)[0]
         eps = PermutationSymbol(m)
-        if(m == 3):
-            (i,j,k) = indices(3)
-            return as_tensor(eps[i,j,k]*gradf[k,j],(i,))
-        elif(m == 2):
-            (j,k) = indices(2)
-            return eps[j,k]*gradf[k,j]
+        if m == 3:
+            (i, j, k) = indices(3)
+            return as_tensor(eps[i, j, k] * gradf[k, j], (i,))
+        elif m == 2:
+            (j, k) = indices(2)
+            return eps[j, k] * gradf[k, j]
         else:
-            print("ERROR: Unsupported dimension of argument to curl.")
-            exit()
-    elif(n==0):
-        return as_vector((-gradf[1],gradf[0]))
+            raise Exception("Unsupported dimension of argument to curl.")
+    elif n == 0:
+        return as_vector((-gradf[1], gradf[0]))
     else:
-        print("ERROR: Unsupported rank of argument to curl.")
-        exit()
+        raise Exception("Unsupported rank of argument to curl.")
 
 # pushforwards for compatible spaces; output is in cartesian coordinates for
 # physical space
 
-def cartesianPushforwardN(u,F):
+def cartesian_push_forward_N(u, F):
     """
     The curl-conserving pushforward of ``u`` by mapping ``F`` (as might be
     used for a Nedelec element, hence "N").  This is only valid for 3D vector
@@ -317,7 +320,8 @@ def cartesianPushforwardN(u,F):
     # the 2D-safe pseudo-inverse implementation is overkill.
     #return (pinvD(F).T)*u
 
-def cartesianPushforwardRT(v,F):
+
+def cartesian_push_forward_RT(v, F):
     """
     The div-conserving pushforward of ``v`` by mapping ``F`` (as might be
     used for a Raviart--Thomas element, hence "RT").
@@ -329,13 +333,14 @@ def cartesianPushforwardRT(v,F):
     # formula remains well-defined on manifolds of nonzero co-dimension.
     # In that case det(DF) results in an error.
     
-    # TODO: Include a switch somewhere to use the simpler formlua in the
+    # TODO: Include a switch somewhere to use the simpler formula in the
     # co-dimension zero case, to avoid the unnecessary extra operations.
 
     g = getMetric(F)
     return DF*v/sqrt(det(g))
-    
-def cartesianPushforwardW(phi,F):
+
+
+def cartesian_push_forward_W(phi, F):
     """
     The mass-conserving pushforward of scalar field ``phi`` by mapping 
     ``F``.  ("W" comes from notation in J.A. Evans's dissertation.)
@@ -344,20 +349,21 @@ def cartesianPushforwardW(phi,F):
     #return phi/det(DF)
     g = getMetric(F)
     return phi/sqrt(det(g))
-    
-# TODO: rename this to ScaledMeasure
+
+
 # I can't just scale a measure by a Jacobian, so I'll store them separately,
 # then overload __rmul__()
-class tIGArMeasure:
-
+class ScaledMeasure:
     """
     A UFL object multiplied by a measure produces a ``Form``, which cannot
-    then be used conveniently, like a weighted measure.  This class is a 
-    way to circumvent that, by storing the weight and measure separately,
+    then be used conveniently like a weighted measure.  This class is a way
+    to circumvent that, by storing the weight and measure separately,
     and combining them only once right-multiplied by something else.
 
-    NOTE: Attempting to use subdomain data with the class currently
-    behaves erratically.
+    Warnings
+    --------
+    Attempting to use subdomain data with the class currently behaves
+    erratically.
     """
     
     # if quadDeg==None, then this works if meas is a FEniCS measure, OR if
@@ -365,80 +371,91 @@ class tIGArMeasure:
     # if meas is a FEniCS measure, though, since the convoluted expressions
     # for rational splines tend to drive up the automatically-determined
     # quadrature degree
-    def __init__(self,J,meas,quadDeg=None,boundaryMarkers=None):
+    def __init__(self, J, meas, quad_deg=None, boundary_markers=None):
         """
-        Initializes a weighted measure that will behave like ``J*meas``.
-        The optional argument ``quadDeg`` sets the quadrature degree of 
-        ``meas``, which is a good idea for integrating the sorts of 
-        complicated expressions that come out of rational spline 
-        discretizations, because the automatically-computed quadrature rules
-        have too many points.  The argument ``boundaryMarkers`` can be used
-        to set ``subdomain_data`` of ``meas``, to perform integrals over
-        specific sub-domains.
+        Parameters
+        ----------
+        J : Jacobian of the scaling, e.g. ``J*meas``
+        meas : Integration measure
+        quad_deg : Quadrature degree used in numerical integration
+        boundary_markers : Sub-domain data boundary markers, e.g. ``meas(1)``
         """
-        if(quadDeg != None):
+        if quad_deg is not None:
             # TODO: is this reflected in the calling scope?
-            meas = meas(metadata={'quadrature_degree': quadDeg})
-        if(boundaryMarkers != None):
-            meas = meas(subdomain_data=boundaryMarkers)
+            meas = meas(metadata={'quadrature_degree': quad_deg})
+        if boundary_markers is not None:
+            meas = meas(subdomain_data=boundary_markers)
         self.meas = meas
         self.J = J
 
-    def setMarkers(self,markers):
+    def set_markers(self, markers):
         """
-        Sets the ``subdomain_data`` attribute of ``self.meas`` to 
-        ``markers``.  
+        Redefine measure with provided sub-domain markers
+
+        Parameters
+        ----------
+        markers : Sub-domain markers
         """
         self.meas = self.meas(subdomain_data=markers)
-        
-        
+
     # TODO: should probably change name of argument so that the measure
     # can be called exactly like spline.dx(subdomain_data=...)
-    def __call__(self,marker):
+    def __call__(self, marker: int):
         """
-        This allows ``subdomain_data`` of an existing measure to be 
-        changed to ``marker`` after the fact, using the same calling
-        syntax that one would use to change ``subdomain_data`` of an
-        ordinary measure.
+        Parameters
+        ----------
+        marker : Sub-domain ID. E.g. in regular DOLFIN ``dx(marker)``
+
+        Returns
+        -------
+        A newly created ``ScaledMeasure`` with the updated sub-domain data
         """
-        return tIGArMeasure(self.J,self.meas(marker))
+        return ScaledMeasure(self.J, self.meas(marker))
         
     def __rmul__(self, other):
         """
-        Multiplies ``other`` by ``self.J``, THEN multiplies by ``self.meas``.
+        Parameters
+        ----------
+        other : To be multiplied by
+
+        Returns
+        -------
+        Scaled measure multiplied by other, i.e. ``other * J * measure``
         """
         return (other*self.J)*self.meas
 
-def getQuadRule(n):
+
+def get_quadrature_rule(n: int):
     """
     Return a list of points and a list of weights for integration over the
     interval (-1,1), using ``n`` quadrature points.  
 
-    NOTE: This functionality is mainly intended
-    for use in through-thickness integration of Kirchhoff--Love shell
-    formulations, but might also be useful for implementing space--time
-    formulations using a mixed element to combine DoFs from various time
-    levels.
+    Notes
+    -----
+    This functionality is mainly intended for use in through-thickness
+    integration of Kirchhoff--Love shell formulations, but might also be
+    useful for implementing space--time formulations using a mixed element to
+    combine DoFs from various time levels.
     """
-    if(n==1):
-        xi = [Constant(0.0),]
-        w = [Constant(2.0),]
-        return (xi,w)
-    if(n==2):
+    if n == 1:
+        xi = [Constant(0.0), ]
+        w = [Constant(2.0), ]
+        return xi, w
+    if n == 2:
         xi = [Constant(-0.5773502691896257645091488),
               Constant(0.5773502691896257645091488)]
         w = [Constant(1.0),
              Constant(1.0)]
-        return (xi,w)
-    if(n==3):
+        return xi, w
+    if n == 3:
         xi = [Constant(-0.77459666924148337703585308),
               Constant(0.0),
               Constant(0.77459666924148337703585308)]
         w = [Constant(0.55555555555555555555555556),
              Constant(0.88888888888888888888888889),
              Constant(0.55555555555555555555555556)]
-        return (xi,w)
-    if(n==4):
+        return xi, w
+    if n == 4:
         xi = [Constant(-0.86113631159405257524),
               Constant(-0.33998104358485626481),
               Constant(0.33998104358485626481),
@@ -447,24 +464,30 @@ def getQuadRule(n):
              Constant(0.65214515486254614264),
              Constant(0.65214515486254614264),
              Constant(0.34785484513745385736)]
-        return (xi,w)
+        return xi, w
     
     # TODO: add more quadrature rules (or, try to find a function in scipy or
     # another common library, to generate arbitrary Gaussian quadrature
     # rules on-demand).
-    
-    print("ERROR: invalid number of quadrature points requested.")
-    exit()
+    raise NotImplementedError("Invalid number of quadrature points requested.")
 
-def getQuadRuleInterval(n,L):
+
+def get_quadrature_rule_interval(n: int, L: float):
     """
-    Returns an ``n``-point quadrature rule for the interval 
-    (-``L``/2,``L``/2), consisting of a list of points and list of weights.
+    Parameters
+    ----------
+    n: Number of points
+    L: Interval length
+
+    Returns
+    -------
+    An ``n``-point quadrature rule for the interval (-``L``/2,``L``/2),
+    consisting of a list of points and list of weights.
     """
-    xi_hat, w_hat = getQuadRule(n)
+    xi_hat, w_hat = get_quadrature_rule(n)
     xi = []
     w = []
-    for i in range(0,n):
-        xi += [L*xi_hat[i]/2.0,]
-        w += [L*w_hat[i]/2.0,]
-    return (xi,w)
+    for i in range(0, n):
+        xi += [L * xi_hat[i] / 2.0, ]
+        w += [L * w_hat[i] / 2.0, ]
+    return xi, w

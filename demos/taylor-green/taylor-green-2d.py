@@ -196,8 +196,8 @@ for i in range(0,N_STEPS):
     # For visualization, we want the physical components of velocity, but
     # these are not Function objects and cannot be written directly to
     # ParaView files.  Instead, project them onto a space of linears.
-    u0 = spline.projectScalarOntoLinears(u[0])
-    u1 = spline.projectScalarOntoLinears(u[1])
+    u0 = spline.project_scalar_onto_linears(u[0])
+    u1 = spline.project_scalar_onto_linears(u[1])
     u0.rename("u0","u0")
     u1.rename("u1","u1")
     u0File << u0

@@ -86,8 +86,8 @@ soln1 = -cos(x[0])*sin(x[1])*cos(x[2])
 soln = as_vector([soln0,soln1,Constant(0.0)])
 
 # For 3D computations, use an iterative solver.
-spline.linearSolver = PETScKrylovSolver("gmres","jacobi")
-spline.linearSolver.parameters["relative_tolerance"] = 1e-2
+spline.linear_solver = PETScKrylovSolver("gmres", "jacobi")
+spline.linear_solver.parameters["relative_tolerance"] = 1e-2
 spline.relativeTolerance = 1e-3
 
 # The unknown parametric velocity:
