@@ -35,7 +35,7 @@ def uniform_knots(p: int, xi0: float, xi1: float, n_elements: int,
 
 # need a custom eps for checking knots; dolfin_eps is too small and doesn't
 # reliably catch repeated knots
-KNOT_NEAR_EPS = 10.0*DOLFIN_EPS
+KNOT_NEAR_EPS = 10.0*dolfin.DOLFIN_EPS
 
 
 # cProfile identified basis function evaluation as a bottleneck in the
@@ -124,7 +124,7 @@ PYBIND11_MODULE(SIGNATURE, m)
 
 #basisFuncsCXXModule = compile_extension_module(basisFuncsCXXString,
 #                                               cppargs='-g -O2')
-basisFuncsCXXModule = compile_cpp_code(basisFuncsCXXString)
+basisFuncsCXXModule = dolfin.compile_cpp_code(basisFuncsCXXString)
 
     
 # function to eval B-spline basis functions (for internal use)
@@ -181,7 +181,7 @@ class BSpline1(object):
         ct = -1
         lastKnot = None
         for i in range(0,len(self.knots)):
-            if(lastKnot == None or (not near(self.knots[i],lastKnot,\
+            if(lastKnot == None or (not dolfin.near(self.knots[i],lastKnot,\
                                              eps=KNOT_NEAR_EPS))):
                 ct += 1
                 self.uniqueKnots[ct] = knots[i]
@@ -234,7 +234,7 @@ class BSpline1(object):
         """
         self.nel = 0
         for i in range(1,len(self.knots)):
-            if(not near(self.knots[i],self.knots[i-1],\
+            if(not dolfin.near(self.knots[i],self.knots[i-1],\
                         eps=KNOT_NEAR_EPS)):
                 self.nel += 1
 
@@ -501,9 +501,9 @@ class BSpline(AbstractScalarBasis):
     def generate_mesh(self, comm=worldcomm):
         if(self.nvar == 1):
             spline = self.splines[0]
-            mesh = IntervalMesh(comm,spline.nel,0.0,float(spline.nel))
+            mesh = dolfin.IntervalMesh(comm,spline.nel,0.0,float(spline.nel))
             x = mesh.coordinates()
-            xbar = zeros((len(x),1))
+            xbar = numpy.zeros((len(x),1))
             for i in range(0,len(x)):
                 knotIndex = int(round(x[i,0]))
                 xbar[i,0] = spline.uniqueKnots[knotIndex]
@@ -513,10 +513,11 @@ class BSpline(AbstractScalarBasis):
             uspline = self.splines[0]
             vspline = self.splines[1]
             if(self.use_rect):
-                cellType = CellType.Type.quadrilateral
+                cellType = dolfin.CellType.Type.quadrilateral
             else:
-                cellType = CellType.Type.triangle
-            mesh = UnitSquareMesh.create(comm,uspline.nel,vspline.nel,cellType)
+                cellType = dolfin.CellType.Type.triangle
+            mesh = dolfin.UnitSquareMesh.create(comm, uspline.nel,
+                                                vspline.nel, cellType)
             #mesh = RectangleMesh(Point(0.0,0.0),\
             #                     Point(uspline.nel,vspline.nel),\
             #                     uspline.nel,vspline.nel)
@@ -536,10 +537,10 @@ class BSpline(AbstractScalarBasis):
             vspline = self.splines[1]
             wspline = self.splines[2]
             if(self.use_rect):
-                cellType = CellType.Type.hexahedron
+                cellType = dolfin.CellType.Type.hexahedron
             else:
-                cellType = CellType.Type.tetrahedron
-            mesh = UnitCubeMesh.create(comm,
+                cellType = dolfin.CellType.Type.tetrahedron
+            mesh = dolfin.UnitCubeMesh.create(comm,
                                        uspline.nel,vspline.nel,wspline.nel,
                                        cellType)
             #mesh = BoxMesh(Point(0.0,0.0,0.0),\
@@ -561,7 +562,7 @@ class BSpline(AbstractScalarBasis):
 
         # Apply any over-refinement specified:
         for i in range(0, self.over_refine):
-            mesh = refine(mesh)
+            mesh = dolfin.refine(mesh)
         return mesh
         
     def compute_ncp(self):

@@ -15,6 +15,7 @@ compilation in this example takes *much* longer than it does for typical
 forms. 
 """
 
+from dolfin import *
 from tIGAr import *
 from tIGAr.BSplines import *
 from tIGAr.timeIntegration import *

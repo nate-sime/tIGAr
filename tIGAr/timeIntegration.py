@@ -82,7 +82,7 @@ class LoadStepper:
         """
         self.DELTA_T = DELTA_T
         self.tval = t
-        self.t = Expression("t",t=self.tval,degree=0)
+        self.t = dolfin.Expression("t",t=self.tval,degree=0)
         self.advance()
 
     def advance(self):
@@ -233,12 +233,12 @@ class GeneralizedAlphaIntegrator:
         # must make copies first, to avoid using updated values in
         # self.xdot(), etc., then assign self.xdot, etc., to re-assigned
         # copies
-        x_old = Function(self.x.function_space())
-        xdot_old = Function(self.x.function_space())
+        x_old = dolfin.Function(self.x.function_space())
+        xdot_old = dolfin.Function(self.x.function_space())
         x_old.assign(self.x)
         xdot_old.assign(self.xdot())
         if(self.systemOrder==2):
-            xddot_old = Function(self.x.function_space())
+            xddot_old = dolfin.Function(self.x.function_space())
             xddot_old.assign(self.xddot())
         self.x_old.assign(x_old)
         self.xdot_old.assign(xdot_old)

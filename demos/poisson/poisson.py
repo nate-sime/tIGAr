@@ -78,30 +78,30 @@ for level, n_ele in enumerate(n_eles):
     # Homogeneous coordinate representation of the trial function u.  Because 
     # weights are 1 in the B-spline case, this can be used directly in the PDE,
     # without dividing through by weight.
-    u = TrialFunction(spline.V)
+    u = ufl.TrialFunction(spline.V)
 
     # Corresponding test function.
-    v = TestFunction(spline.V)
+    v = ufl.TestFunction(spline.V)
 
     # Create a force, f, to manufacture the solution, soln
     x = spline.spatial_coordinates()
-    soln = sin(pi * x[0]) * sin(pi * x[1])
+    soln = ufl.sin(ufl.pi * x[0]) * ufl.sin(ufl.pi * x[1])
     f = -spline.div(spline.grad(soln))
 
     # Set up and solve the Poisson problem
     a = inner(spline.grad(u), spline.grad(v)) * spline.dx
     L = inner(f, v) * spline.dx
-    u = Function(spline.V)
+    u = dolfin.Function(spline.V)
     spline.solve_linear_variational_problem(a == L, u)
 
     ####### Postprocessing #######
 
     # The solution, u, is in the homogeneous representation, but, again, for
     # B-splines with weight=1, this is the same as the physical representation.
-    File("results/u.pvd") << u
+    dolfin.File("results/u.pvd") << u
 
     # Compute and print the $L^2$ error in the discrete solution.
-    L2_error = math.sqrt(assemble(((u - soln) ** 2) * spline.dx))
+    L2_error = math.sqrt(dolfin.assemble(((u - soln) ** 2) * spline.dx))
     L2_errors[level] = L2_error
     if (level > 0):
         rate = math.log(L2_errors[level - 1] / L2_errors[level]) / math.log(2.0)

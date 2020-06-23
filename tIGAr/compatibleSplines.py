@@ -74,7 +74,7 @@ class BSplineCompat(AbstractMultiFieldSpline):
     
     # args: controlMesh, RTorN, degrees, periodicities=None,
     def __init__(self, control_mesh: AbstractControlMesh, RTorN, degrees,
-                 periodicities=None, comm=MPI.comm_world):
+                 periodicities=None, comm=dolfin.MPI.comm_world):
         """
         The first argument is an ``AbstractControlMesh``, the second is
         a string containing "RT" or "N", the third is a list of polynomial
@@ -149,15 +149,15 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     
     # augmented problem
     if(w==None):
-        w = Function(spline.V)
+        w = dolfin.Function(spline.V)
 
     augmentation = penalty*divOp(u)*divOp(v)*spline.dx \
                    + divOp(w)*divOp(v)*spline.dx
     residualFormAug = residualForm + augmentation
     if(J==None):
-        JAug = derivative(residualFormAug,u)
+        JAug = ufl.derivative(residualFormAug,u)
     else:
-        JAug = J + derivative(augmentation,u)
+        JAug = J + ufl.derivative(augmentation,u)
 
     # TODO: Think more about implementing separate tolerances for
     # momentum and continuity residuals.
@@ -168,7 +168,7 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
         if(i==0 or (not reuseLHS)):
             MTAM = spline.assemble_matrix(JAug, applyBCs=applyBCs)
 
-        currentNorm = norm(MTb)
+        currentNorm = dolfin.norm(MTb)
         if(i==0):
             initialNorm = currentNorm
         relativeNorm = currentNorm/initialNorm
@@ -179,7 +179,7 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
         if(currentNorm/initialNorm < relativeTolerance):
             converged = True
             break
-        du = Function(spline.V)
+        du = dolfin.Function(spline.V)
         #du.assign(Constant(0.0)*du)
         spline.solve_linear_system(MTAM, MTb, du)
         #as_backend_type(u.vector()).vec().assemble()
@@ -212,8 +212,8 @@ def divFreeProject(toProject,spline,
     ``applyBCs`` indicates whether or not to apply Dirichlet boundary
     conditions.
     """
-    u_hat = Function(spline.V)
-    v_hat = TestFunction(spline.V)
+    u_hat = dolfin.Function(spline.V)
+    v_hat = ufl.TestFunction(spline.V)
     u = cartesian_push_forward_RT(getVelocity(u_hat), spline.F)
     v = cartesian_push_forward_RT(getVelocity(v_hat), spline.F)
     res = inner(u-toProject,v)*spline.dx

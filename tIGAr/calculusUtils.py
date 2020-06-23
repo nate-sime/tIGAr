@@ -11,9 +11,12 @@ module can also be used in non-tIGAr FEniCS applications.
 # inside some inner loop over quadrature points, and should therefore be
 # optimized for generality/readability rather than speed of execution.
 
-from dolfin import *
-from ufl import indices, rank, shape
-from ufl.classes import PermutationSymbol
+# TODO: Why do we need dolfin's Constant?
+from dolfin import Constant
+import ufl
+import ufl.classes
+from ufl import grad, div, indices, inv, rank, shape, as_tensor, sqrt, det, \
+    inner, dot
 
 def getMetric(F):
     """
@@ -290,7 +293,7 @@ def cartesian_curl(f, F):
     gradf = cartesian_grad(f, F)
     if n == 1:
         m = shape(f)[0]
-        eps = PermutationSymbol(m)
+        eps = ufl.classes.PermutationSymbol(m)
         if m == 3:
             (i, j, k) = indices(3)
             return as_tensor(eps[i, j, k] * gradf[k, j], (i,))

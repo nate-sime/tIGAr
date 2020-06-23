@@ -9,6 +9,7 @@ is the PhD thesis of J.A. Evans:
 This demo uses NURBS to describe a distorted mesh.
 """
 
+from dolfin import *
 from tIGAr import *
 from tIGAr.NURBS import *
 from igakit.nurbs import NURBS as NURBS_ik
